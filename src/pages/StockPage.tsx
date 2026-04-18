@@ -104,7 +104,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const handleQuantityChange = (sph: string, cyl: string, axis: number | undefined, delta: number) => {
     const key = `${parseFloat(sph).toFixed(2)}-${parseFloat(cyl).toFixed(2)}-${axis || ''}`;
-    const currentQty = stock[key] || 0;
+    const currentQty = stock[key] || (originalStock[key] || 0);
     const newQty = Math.max(0, currentQty + delta);
     setStock({ ...stock, [key]: newQty });
   };
@@ -117,13 +117,9 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     setLoading(true);
 
     const entries = Object.entries(stock);
-    if (entries.length === 0) {
-        setLoading(false);
-        return;
-    }
+    let updatedCount = 0;
 
     for (const [key, quantity] of entries) {
-      // Only update if changed
       if (quantity === originalStock[key]) continue;
 
       const [sphStr, cylStr, axisStr] = key.split('-');
@@ -144,10 +140,15 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
           onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, coatings'
       });
       if (error) console.error("Save error:", error);
+      else updatedCount++;
     }
 
-    alert('Stock updated successfully!');
-    await fetchStock();
+    if (updatedCount > 0) {
+        alert('Stock updated successfully!');
+        await fetchStock();
+    } else {
+        alert('No changes to save.');
+    }
     setLoading(false);
   };
 
@@ -185,25 +186,28 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
       <div className="bg-white p-6 rounded-lg shadow-md space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Shop</label>
-            <select
-              value={selectedShop}
-              onChange={(e) => setSelectedShop(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border"
-            >
-              <option value="">Select Shop</option>
-              {shops.map(shop => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
-            </select>
+          <div className="md:col-span-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Shop</label>
+            <div className="flex flex-wrap gap-2">
+              {shops.map(shop => (
+                <button
+                  key={shop.id}
+                  onClick={() => setSelectedShop(shop.id)}
+                  className={`px-4 py-2 rounded-md border text-sm font-medium transition-colors ${selectedShop === shop.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'}`}
+                >
+                  {shop.name}
+                </button>
+              ))}
+            </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Material</label>
-            <div className="flex space-x-2 mt-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Material</label>
+            <div className="flex space-x-2">
               {MATERIALS.map(m => (
                 <button
                   key={m}
                   onClick={() => setMaterial(m)}
-                  className={`px-3 py-1 rounded-md border ${material === m ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}
+                  className={`px-3 py-1 rounded-md border text-sm ${material === m ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-700 border-gray-300'}`}
                 >
                   {m}
                 </button>
@@ -211,7 +215,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Vision</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Vision</label>
             <select
               value={vision}
               onChange={(e) => {
@@ -219,7 +223,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                   setVision(newVision);
                   setSelectedAxis(undefined);
               }}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border"
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border text-sm"
             >
               {VISIONS.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
@@ -235,7 +239,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                         setPowerType(e.target.value as PowerType);
                         if (e.target.value === 'SPH') setSelectedAxis(undefined);
                     }}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border text-sm"
                 >
                     <option value="SPH">SPH</option>
                     <option value="CYL">CYL</option>
@@ -246,8 +250,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             <div>
                 <label className="block text-sm font-medium text-gray-700">Sign</label>
                 <div className="flex space-x-2 mt-1">
-                    <button onClick={() => setSign('+')} className={`px-4 py-1 rounded-md border ${sign === '+' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}>+</button>
-                    <button onClick={() => setSign('-')} className={`px-4 py-1 rounded-md border ${sign === '-' ? 'bg-indigo-600 text-white' : 'bg-gray-100'}`}>-</button>
+                    <button onClick={() => setSign('+')} className={`px-4 py-1 rounded-md border text-sm ${sign === '+' ? 'bg-indigo-600 text-white' : 'bg-gray-50'}`}>+</button>
+                    <button onClick={() => setSign('-')} className={`px-4 py-1 rounded-md border text-sm ${sign === '-' ? 'bg-indigo-600 text-white' : 'bg-gray-50'}`}>-</button>
                 </div>
             </div>
             {showCylSelector && (
@@ -256,7 +260,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                     <select
                         value={selectedCyl}
                         onChange={(e) => setSelectedCyl(e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border text-sm"
                     >
                         {powerList.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
@@ -268,7 +272,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                     <select
                         value={selectedAxis || ''}
                         onChange={(e) => setSelectedAxis(e.target.value ? parseInt(e.target.value) : undefined)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border text-sm"
                     >
                         <option value="">Select Axis</option>
                         {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => (
@@ -324,14 +328,15 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             {powerList.map((p) => {
               const name = formatLensName(material, vision, sign, powerType, p, selectedCyl, coatings, selectedAxis);
               const key = `${parseFloat(p).toFixed(2)}-${parseFloat(selectedCyl).toFixed(2)}-${selectedAxis || ''}`;
-              const qty = stock[key] || 0;
+              const qty = stock[key] || originalStock[key] || 0;
               const origQty = originalStock[key] || 0;
+              const delta = qty - origQty;
 
               return (
                 <tr key={p}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{name}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-medium text-gray-500">{origQty.toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-bold text-indigo-600">{qty.toFixed(2)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-bold text-indigo-600">{delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end space-x-2">
                       <button

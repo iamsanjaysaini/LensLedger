@@ -29,6 +29,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [customCoating, setCustomCoating] = useState('');
   const [availableCoatings, setAvailableCoatings] = useState(DEFAULT_COATINGS);
   const [stock, setStock] = useState<Record<string, number>>({});
+  const [originalStock, setOriginalStock] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
 
   const powerList = generatePowerList();
@@ -70,7 +71,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       .eq('sign', sign)
       .eq('power_type', powerType);
 
-    // Use @> for array containment check
     if (coatings.length > 0) {
         query = query.contains('coatings', coatings);
     }
@@ -97,7 +97,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         stockMap[key] = Number(item.quantity);
       });
     }
-    setStock(stockMap);
+    setStock({ ...stockMap });
+    setOriginalStock({ ...stockMap });
     setLoading(false);
   }
 
@@ -122,6 +123,9 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     }
 
     for (const [key, quantity] of entries) {
+      // Only update if changed
+      if (quantity === originalStock[key]) continue;
+
       const [sphStr, cylStr, axisStr] = key.split('-');
       const update = {
         shop_id: selectedShop,
@@ -143,7 +147,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     }
 
     alert('Stock updated successfully!');
-    await fetchStock(); // Refresh from DB
+    await fetchStock();
     setLoading(false);
   };
 
@@ -311,6 +315,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lens Description</th>
+              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Current Quantity</th>
               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity (Pairs)</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
@@ -320,11 +325,13 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
               const name = formatLensName(material, vision, sign, powerType, p, selectedCyl, coatings, selectedAxis);
               const key = `${parseFloat(p).toFixed(2)}-${parseFloat(selectedCyl).toFixed(2)}-${selectedAxis || ''}`;
               const qty = stock[key] || 0;
+              const origQty = originalStock[key] || 0;
 
               return (
                 <tr key={p}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-bold">{qty.toFixed(2)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-medium text-gray-500">{origQty.toFixed(2)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-bold text-indigo-600">{qty.toFixed(2)}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end space-x-2">
                       <button

@@ -26,6 +26,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [powerType, setPowerType] = useState<PowerType>('SPH');
   const [selectedCyl, setSelectedCyl] = useState('0.00');
   const [selectedAxis, setSelectedAxis] = useState<number | undefined>(undefined);
+  const [customCoating, setCustomCoating] = useState('');
+  const [availableCoatings, setAvailableCoatings] = useState(DEFAULT_COATINGS);
   const [deltas, setDeltas] = useState<Record<string, { qty: number, name: string }>>({});
   const [loading, setLoading] = useState(false);
 
@@ -88,13 +90,38 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     setLoading(false);
   };
 
-  const generateReport = async () => {
+  const toggleCoating = (c: string) => {
+    if (coatings.includes(c)) {
+      setCoatings(coatings.filter(item => item !== c));
+    } else {
+      setCoatings([...coatings, c]);
+    }
+  };
+
+  const addCustomCoating = () => {
+    if (customCoating && !availableCoatings.includes(customCoating)) {
+      setAvailableCoatings([...availableCoatings, customCoating]);
+      setCoatings([...coatings, customCoating]);
+      setCustomCoating('');
+    }
+  };
+
+  const generateOrderReport = async () => {
     setLoading(true);
-    // Fetch all orders from both shops (normally you'd filter by date)
-    const { data: orders } = await supabase.from('orders').select('lens_details, quantity');
+    // Fetch all orders for the current selected shop (as per user context usually shops order separately)
+    // Or for all shops? The user said "combined date wise order output" in dashboard,
+    // but here in order page it's usually for the current selection or recent orders.
+    // Let's stick to consolidated view for the selected shop for today.
+
+    const today = new Date().toISOString().split('T')[0];
+    const { data: orders } = await supabase
+        .from('orders')
+        .select('lens_details, quantity')
+        .eq('shop_id', selectedShop)
+        .gte('created_at', today);
 
     if (!orders || orders.length === 0) {
-        alert('No orders found to generate report.');
+        alert('No orders found for today to generate report.');
         setLoading(false);
         return;
     }
@@ -106,23 +133,85 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         summary[name] = (summary[name] || 0) + Number(o.quantity);
     });
 
-    const reportLines = Object.entries(summary)
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([name, qty]) => `${name}  ${qty} pair`);
+    const items = Object.entries(summary).sort((a, b) => a[0].localeCompare(b[0]));
+    const dateStr = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
+    const shopName = shops.find(s => s.id === selectedShop)?.name || '';
+
+    // Split items into 2 columns (4 layout columns: Power | Qty | Power | Qty)
+    const rows = [];
+    for (let i = 0; i < items.length; i += 2) {
+        rows.push([items[i], items[i+1]]);
+    }
 
     const win = window.open('', '_blank');
     if (win) {
         win.document.write(`
             <html>
                 <head>
-                    <title>Order Report</title>
+                    <title>Order - ${shopName}</title>
+                    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
                     <style>
-                        body { font-family: monospace; padding: 40px; }
-                        pre { font-size: 16px; line-height: 1.5; }
+                        @page { size: A4; margin: 1cm; }
+                        body { font-family: 'Courier New', Courier, monospace; font-size: 12px; margin: 0; padding: 0; background: #f0f0f0; }
+                        .controls { background: #333; padding: 10px; display: flex; gap: 10px; justify-content: center; position: sticky; top: 0; z-index: 100; }
+                        .btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; }
+                        .btn:hover { background: #4338ca; }
+                        .page-container { background: white; width: 210mm; min-height: 297mm; margin: 20px auto; padding: 20mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); box-sizing: border-box; }
+                        .header { display: flex; justify-content: space-between; border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; }
+                        .shop-name { font-weight: bold; font-size: 16px; }
+                        table { width: 100%; border-collapse: collapse; }
+                        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+                        th { background: #f0f0f0; font-size: 10px; text-transform: uppercase; }
+                        .qty-col { width: 60px; text-align: center; font-weight: bold; }
+                        @media print { .controls { display: none; } .page-container { margin: 0; box-shadow: none; border: none; } body { background: white; } }
                     </style>
                 </head>
-                <body onload="window.print()">
-                    <pre>${reportLines.join('\n')}</pre>
+                <body>
+                    <div class="controls">
+                        <button class="btn" onclick="window.print()">Print / Save PDF</button>
+                        <button class="btn" onclick="downloadJPG()">Download JPG</button>
+                    </div>
+                    <div id="capture" class="page-container">
+                        <div class="header">
+                            <div class="shop-name">${shopName} - Order</div>
+                            <div>Date: ${dateStr}</div>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Lens Power / Details</th>
+                                    <th class="qty-col">Qty</th>
+                                    <th>Lens Power / Details</th>
+                                    <th class="qty-col">Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows.map(row => `
+                                    <tr>
+                                        <td>${row[0][0]}</td>
+                                        <td class="qty-col">${row[0][1]}</td>
+                                        <td>${row[1] ? row[1][0] : ''}</td>
+                                        <td class="qty-col">${row[1] ? row[1][1] : ''}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <script>
+                        function downloadJPG() {
+                            const btn = event.target;
+                            btn.disabled = true;
+                            btn.innerText = 'Generating...';
+                            html2canvas(document.querySelector("#capture"), { scale: 2 }).then(canvas => {
+                                const link = document.createElement('a');
+                                link.download = 'Order_${shopName.replace(/\s+/g, '_')}_${dateStr.replace(/\//g, '-')}.jpg';
+                                link.href = canvas.toDataURL('image/jpeg', 0.9);
+                                link.click();
+                                btn.disabled = false;
+                                btn.innerText = 'Download JPG';
+                            });
+                        }
+                    </script>
                 </body>
             </html>
         `);
@@ -139,8 +228,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold">Place Order</h1>
         <div className="flex gap-2">
-            <button onClick={generateReport} className="bg-blue-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-blue-700">
-                <FileText className="w-4 h-4 mr-1" /> Report
+            <button onClick={generateOrderReport} className="bg-blue-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-blue-700">
+                <FileText className="w-4 h-4 mr-1" /> Generate Order
             </button>
             <button onClick={saveOrder} disabled={loading} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-green-700 disabled:opacity-50">
                 <ShoppingCart className="w-4 h-4 mr-1" /> Save
@@ -220,6 +309,38 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                     </select>
                 </div>
             )}
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Coatings</label>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {availableCoatings.map(c => (
+                <button
+                  key={c}
+                  onClick={() => toggleCoating(c)}
+                  className={`px-2 py-1 rounded-full text-[10px] border ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-600 border-gray-200'}`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1 ml-auto">
+              <input
+                type="text"
+                value={customCoating}
+                onChange={(e) => setCustomCoating(e.target.value)}
+                placeholder="Add coating..."
+                className="text-[10px] border border-gray-300 rounded px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <button
+                onClick={addCustomCoating}
+                className="bg-indigo-100 text-indigo-700 p-1 rounded hover:bg-indigo-200"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -1,0 +1,13 @@
+
+> app@1.0.0 dev
+> vite --port 3000
+
+
+  VITE v6.4.2  ready in 218 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: use --host to expose
+10:21:47 AM [vite] (client) hmr update /src/pages/StockPage.tsx, /src/index.css
+10:22:18 AM [vite] (client) hmr update /src/pages/OrderPage.tsx, /src/index.css
+10:22:41 AM [vite] (client) hmr update /src/pages/OrderPage.tsx, /src/index.css
+10:22:52 AM [vite] (client) hmr update /src/pages/Dashboard.tsx, /src/index.css

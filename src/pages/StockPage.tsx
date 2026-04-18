@@ -68,22 +68,32 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       .eq('material', material)
       .eq('vision', vision)
       .eq('sign', sign)
-      .eq('power_type', powerType)
-      .contains('coatings', coatings);
+      .eq('power_type', powerType);
+
+    // Use @> for array containment check
+    if (coatings.length > 0) {
+        query = query.contains('coatings', coatings);
+    }
 
     if (powerType !== 'SPH') {
         query = query.eq('cyl', parseFloat(selectedCyl));
-    }
-    if (selectedAxis !== undefined) {
-        query = query.eq('axis', selectedAxis);
+    } else {
+        query = query.eq('cyl', 0);
     }
 
-    const { data } = await query;
+    if (selectedAxis !== undefined) {
+        query = query.eq('axis', selectedAxis);
+    } else {
+        query = query.is('axis', null);
+    }
+
+    const { data, error } = await query;
+    if (error) console.error("Fetch error:", error);
 
     const stockMap: Record<string, number> = {};
     if (data) {
       data.forEach((item) => {
-        const key = `${item.sph}-${item.cyl}-${item.axis || ''}`;
+        const key = `${item.sph.toFixed(2)}-${item.cyl.toFixed(2)}-${item.axis || ''}`;
         stockMap[key] = Number(item.quantity);
       });
     }
@@ -91,8 +101,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     setLoading(false);
   }
 
-  const handleQuantityChange = async (sph: string, cyl: string, axis: number | undefined, delta: number) => {
-    const key = `${sph}-${cyl}-${axis || ''}`;
+  const handleQuantityChange = (sph: string, cyl: string, axis: number | undefined, delta: number) => {
+    const key = `${parseFloat(sph).toFixed(2)}-${parseFloat(cyl).toFixed(2)}-${axis || ''}`;
     const currentQty = stock[key] || 0;
     const newQty = Math.max(0, currentQty + delta);
     setStock({ ...stock, [key]: newQty });
@@ -104,29 +114,36 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       return;
     }
     setLoading(true);
-    const updates = Object.entries(stock).map(([key, quantity]) => {
-      const [sph, cyl, axis] = key.split('-');
-      return {
+
+    const entries = Object.entries(stock);
+    if (entries.length === 0) {
+        setLoading(false);
+        return;
+    }
+
+    for (const [key, quantity] of entries) {
+      const [sphStr, cylStr, axisStr] = key.split('-');
+      const update = {
         shop_id: selectedShop,
         material,
         vision,
         sign,
         power_type: powerType,
-        sph: parseFloat(sph),
-        cyl: parseFloat(cyl),
-        axis: axis ? parseInt(axis) : null,
+        sph: parseFloat(sphStr),
+        cyl: parseFloat(cylStr),
+        axis: axisStr ? parseInt(axisStr) : null,
         coatings,
         quantity
       };
-    });
 
-    for (const update of updates) {
-        const { error } = await supabase.from('lens_stock').upsert(update, {
-            onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, coatings'
-        });
-        if (error) console.error(error);
+      const { error } = await supabase.from('lens_stock').upsert(update, {
+          onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, coatings'
+      });
+      if (error) console.error("Save error:", error);
     }
+
     alert('Stock updated successfully!');
+    await fetchStock(); // Refresh from DB
     setLoading(false);
   };
 
@@ -171,6 +188,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
               onChange={(e) => setSelectedShop(e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border"
             >
+              <option value="">Select Shop</option>
               {shops.map(shop => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
             </select>
           </div>
@@ -300,7 +318,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
           <tbody className="bg-white divide-y divide-gray-200">
             {powerList.map((p) => {
               const name = formatLensName(material, vision, sign, powerType, p, selectedCyl, coatings, selectedAxis);
-              const key = `${p}-${selectedCyl}-${selectedAxis || ''}`;
+              const key = `${parseFloat(p).toFixed(2)}-${parseFloat(selectedCyl).toFixed(2)}-${selectedAxis || ''}`;
               const qty = stock[key] || 0;
 
               return (

@@ -52,7 +52,7 @@ export function formatLensName(
 
   // Special handle for 0.00
   if (sph === '0.00' && powerType === 'SPH') {
-    powerPart = `0.00`;
+    powerPart = `Plano`;
   } else if (powerType === 'SPH') {
     powerPart = `${signPart}${sph} SPH`;
   } else if (powerType === 'CYL') {

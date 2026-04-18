@@ -288,16 +288,33 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Coatings</label>
-          <div className="flex flex-wrap gap-1.5">
-            {availableCoatings.map(c => (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {availableCoatings.map(c => (
+                <button
+                  key={c}
+                  onClick={() => toggleCoating(c)}
+                  className={`px-2 py-1 rounded-full text-[10px] border ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-600 border-gray-200'}`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1 ml-auto">
+              <input
+                type="text"
+                value={customCoating}
+                onChange={(e) => setCustomCoating(e.target.value)}
+                placeholder="Add coating..."
+                className="text-[10px] border border-gray-300 rounded px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
               <button
-                key={c}
-                onClick={() => toggleCoating(c)}
-                className={`px-2 py-1 rounded-full text-[10px] border ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-600 border-gray-200'}`}
+                onClick={addCustomCoating}
+                className="bg-indigo-100 text-indigo-700 p-1 rounded hover:bg-indigo-200"
               >
-                {c}
+                <Plus className="w-3 h-3" />
               </button>
-            ))}
+            </div>
           </div>
         </div>
       </div>
@@ -307,8 +324,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
           <thead className="bg-gray-50 text-center">
             <tr>
               <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase">Description</th>
-              <th className="px-1 py-2 text-[10px] font-medium text-gray-500 uppercase">Stock</th>
-              <th className="px-1 py-2 text-[10px] font-medium text-gray-500 uppercase">Change</th>
+              <th className="px-1 py-2 text-[10px] font-medium text-gray-500 uppercase">Current Stock</th>
+              <th className="px-1 py-2 text-[10px] font-medium text-gray-500 uppercase">Update (Pairs)</th>
               <th className="px-3 py-2 text-right text-[10px] font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>

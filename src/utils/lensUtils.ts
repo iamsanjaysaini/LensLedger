@@ -50,7 +50,10 @@ export function formatLensName(
   let powerPart = '';
   const signPart = sign || '';
 
-  if (powerType === 'SPH') {
+  // Special handle for 0.00
+  if (sph === '0.00' && powerType === 'SPH') {
+    powerPart = `0.00`;
+  } else if (powerType === 'SPH') {
     powerPart = `${signPart}${sph} SPH`;
   } else if (powerType === 'CYL') {
     powerPart = `${signPart}${cyl} CYL`;
@@ -59,11 +62,6 @@ export function formatLensName(
   } else if (powerType === 'Cross Compound') {
     const oppSign = sign === '+' ? '-' : '+';
     powerPart = `${signPart}${sph}/${oppSign}${cyl}`;
-  }
-
-  // Handle zero power
-  if (sph === '0.00' && powerType === 'SPH') {
-    powerPart = `0.00 SPH`;
   }
 
   let axisPart = '';

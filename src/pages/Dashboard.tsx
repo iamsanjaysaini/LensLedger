@@ -177,7 +177,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
 
       {selectedShop && (
         <div className="bg-white dark:bg-gray-800 shadow-sm rounded-lg overflow-hidden mt-6 border border-gray-200 dark:border-gray-700">
-          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between">
+          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 flex items-center justify-between">
             <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center">
               <ShoppingCart className="w-4 h-4 mr-2 text-indigo-600 dark:text-indigo-400" />
               {shops.find(s => s.id === selectedShop)?.name} Orders
@@ -186,7 +186,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
           <ul className="divide-y divide-gray-100 dark:divide-gray-700 max-h-96 overflow-y-auto">
             {shopOrders.length > 0 ? (
               shopOrders.map((order) => (
-                <li key={order.id} className="px-4 py-3 hover:bg-indigo-50/50 dark:hover:bg-gray-700/50 transition-colors even:bg-gray-50 dark:even:bg-gray-800/50">
+                <li key={order.id} className="px-4 py-3 hover:bg-indigo-50/50 dark:hover:bg-gray-700/50 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">{order.lens_details?.name}</p>
                     <div className="text-right">

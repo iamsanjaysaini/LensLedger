@@ -26,9 +26,10 @@ export const MATERIALS: Material[] = ['CR', 'Poly', 'Glass'];
 export const VISIONS: Vision[] = ['single vision', 'KT', 'Prograssive'];
 export const DEFAULT_COATINGS = ['HC', 'HMC', 'Bluecut green', 'Bluecut Dual coat', 'Bluecut Blue', 'Photo Grey'];
 
-export function generatePowerList() {
+export function generatePowerList(includeZero: boolean = true) {
   const powers = [];
-  for (let i = 0; i <= 10; i += 0.25) {
+  const start = includeZero ? 0 : 0.25;
+  for (let i = start; i <= 10; i += 0.25) {
     powers.push(i.toFixed(2));
   }
   return powers;

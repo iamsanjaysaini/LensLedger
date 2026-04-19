@@ -224,29 +224,29 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const showCylSelector = powerType !== 'SPH';
 
   return (
-    <div className="space-y-4 px-2 md:px-0">
+    <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h1 className="text-xl font-bold">Place Order</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Place Order</h1>
         <div className="flex gap-2">
-            <button onClick={generateOrderReport} className="bg-blue-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-blue-700">
+            <button onClick={generateOrderReport} className="bg-blue-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-blue-700 shadow-sm transition-colors">
                 <FileText className="w-4 h-4 mr-1" /> Generate Order
             </button>
-            <button onClick={saveOrder} disabled={loading} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-green-700 disabled:opacity-50">
+            <button onClick={saveOrder} disabled={loading} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-green-700 disabled:opacity-50 shadow-sm transition-colors">
                 <ShoppingCart className="w-4 h-4 mr-1" /> Save
             </button>
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-lg shadow-sm space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm space-y-4 border border-gray-200 dark:border-gray-700">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Shop</label>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Shop</label>
             <div className="flex gap-2">
               {shops.map(shop => (
                 <button
                   key={shop.id}
                   onClick={() => setSelectedShop(shop.id)}
-                  className={`flex-1 py-1.5 px-2 rounded-md border text-xs font-medium transition-colors ${selectedShop === shop.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-600 border-gray-300'}`}
+                  className={`flex-1 py-2 px-2 rounded-md border text-xs font-medium transition-all ${selectedShop === shop.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 >
                   {shop.name}
                 </button>
@@ -254,13 +254,13 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Material</label>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Material</label>
             <div className="flex gap-2">
               {MATERIALS.map(m => (
                 <button
                   key={m}
                   onClick={() => setMaterial(m)}
-                  className={`flex-1 py-1.5 px-2 rounded-md border text-xs ${material === m ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-600 border-gray-300'}`}
+                  className={`flex-1 py-2 px-2 rounded-md border text-xs font-medium transition-all ${material === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 >
                   {m}
                 </button>
@@ -268,17 +268,17 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Vision</label>
-            <select value={vision} onChange={(e) => { setVision(e.target.value as Vision); setSelectedAxis(undefined); }} className="block w-full rounded-md border-gray-300 p-1.5 border text-xs">
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Vision</label>
+            <select value={vision} onChange={(e) => { setVision(e.target.value as Vision); setSelectedAxis(undefined); }} className="block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border text-xs">
               {VISIONS.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-                <label className="block text-xs font-medium text-gray-500">Power Type</label>
-                <select value={powerType} onChange={(e) => { setPowerType(e.target.value as PowerType); if (e.target.value === 'SPH') setSelectedAxis(undefined); }} className="mt-1 block w-full rounded-md border-gray-300 p-1.5 border text-xs">
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Power Type</label>
+                <select value={powerType} onChange={(e) => { setPowerType(e.target.value as PowerType); if (e.target.value === 'SPH') setSelectedAxis(undefined); }} className="mt-1.5 block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border text-xs">
                     <option value="SPH">SPH</option>
                     <option value="CYL">CYL</option>
                     <option value="Compound">Compound</option>
@@ -286,24 +286,24 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                 </select>
             </div>
             <div>
-                <label className="block text-xs font-medium text-gray-500">Sign</label>
-                <div className="flex gap-2 mt-1">
-                    <button onClick={() => setSign('+')} className={`flex-1 py-1.5 rounded-md border text-xs ${sign === '+' ? 'bg-indigo-600 text-white' : 'bg-gray-50'}`}>+</button>
-                    <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-xs ${sign === '-' ? 'bg-indigo-600 text-white' : 'bg-gray-50'}`}>-</button>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sign</label>
+                <div className="flex gap-2 mt-1.5">
+                    <button onClick={() => setSign('+')} className={`flex-1 py-2 rounded-md border text-xs font-medium transition-all ${sign === '+' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>+</button>
+                    <button onClick={() => setSign('-')} className={`flex-1 py-2 rounded-md border text-xs font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
                 </div>
             </div>
             {showCylSelector && (
                 <div>
-                    <label className="block text-xs font-medium text-gray-500">CYL Power</label>
-                    <select value={selectedCyl} onChange={(e) => setSelectedCyl(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 p-1.5 border text-xs">
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Power</label>
+                    <select value={selectedCyl} onChange={(e) => setSelectedCyl(e.target.value)} className="mt-1.5 block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border text-xs">
                         {powerList.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                 </div>
             )}
             {showAxis && (
                 <div>
-                    <label className="block text-xs font-medium text-gray-500">Axis</label>
-                    <select value={selectedAxis || ''} onChange={(e) => setSelectedAxis(e.target.value ? parseInt(e.target.value) : undefined)} className="mt-1 block w-full rounded-md border-gray-300 p-1.5 border text-xs">
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Axis</label>
+                    <select value={selectedAxis || ''} onChange={(e) => setSelectedAxis(e.target.value ? parseInt(e.target.value) : undefined)} className="mt-1.5 block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border text-xs">
                         <option value="">Select Axis</option>
                         {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
                     </select>
@@ -312,74 +312,76 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Coatings</label>
+          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Coatings</label>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1.5">
               {availableCoatings.map(c => (
                 <button
                   key={c}
                   onClick={() => toggleCoating(c)}
-                  className={`px-2 py-1 rounded-full text-[10px] border ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-600 border-gray-200'}`}
+                  className={`px-3 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`}
                 >
                   {c}
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-1 ml-auto">
+            <div className="flex items-center gap-1.5 ml-auto">
               <input
                 type="text"
                 value={customCoating}
                 onChange={(e) => setCustomCoating(e.target.value)}
                 placeholder="Add coating..."
-                className="text-[10px] border border-gray-300 rounded px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2.5 py-1.5 w-28 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
               />
               <button
                 onClick={addCustomCoating}
-                className="bg-indigo-100 text-indigo-700 p-1 rounded hover:bg-indigo-200"
+                className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 p-1.5 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors"
               >
-                <Plus className="w-3 h-3" />
+                <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50 text-center">
-            <tr>
-              <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase">Description</th>
-              <th className="px-1 py-2 text-[10px] font-medium text-gray-500 uppercase">Qty</th>
-              <th className="px-3 py-2 text-right text-[10px] font-medium text-gray-500 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {powerList.map((p) => {
-              const name = formatLensName(material, vision, sign, powerType, p, selectedCyl, coatings, selectedAxis);
-              const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${p}-${selectedCyl}-${selectedAxis || ''}-${coatings.join(',')}`;
-              const qty = deltas[key]?.qty || 0;
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-800/50 text-center">
+              <tr>
+                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Description</th>
+                <th className="px-2 py-3 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Qty</th>
+                <th className="px-4 py-3 text-right text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              {powerList.map((p) => {
+                const name = formatLensName(material, vision, sign, powerType, p, selectedCyl, coatings, selectedAxis);
+                const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${p}-${selectedCyl}-${selectedAxis || ''}-${coatings.join(',')}`;
+                const qty = deltas[key]?.qty || 0;
 
-              return (
-                <tr key={p}>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-700">{name}</td>
-                  <td className={`px-1 py-2 whitespace-nowrap text-xs text-center font-bold ${qty > 0 ? 'text-indigo-600' : 'text-gray-300'}`}>
-                    {qty.toFixed(2)}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-right">
-                    <div className="flex justify-end gap-1.5">
-                      <button onClick={() => handleQuantityChange(p, name, -0.5)} className="p-1 rounded-md bg-red-50 text-red-500 hover:bg-red-100">
-                        <Minus className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleQuantityChange(p, name, 0.5)} className="p-1 rounded-md bg-green-50 text-green-500 hover:bg-green-100">
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                return (
+                  <tr key={p} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                    <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>
+                    <td className={`px-2 py-3 whitespace-nowrap text-xs text-center font-bold ${qty > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}`}>
+                      {qty.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => handleQuantityChange(p, name, -0.5)} className="p-1.5 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleQuantityChange(p, name, 0.5)} className="p-1.5 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

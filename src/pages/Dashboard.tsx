@@ -147,10 +147,10 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   if (loading && shops.length === 0) return <div className="p-8 text-center text-sm">Loading Dashboard...</div>;
 
   return (
-    <div className="space-y-6 px-2 md:px-0">
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
-        <button onClick={generateCombinedReport} className="flex items-center text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+        <button onClick={generateCombinedReport} className="flex items-center text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md transition-colors">
             <FileText className="w-4 h-4 mr-1" /> Combined Report
         </button>
       </div>
@@ -160,40 +160,44 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
           <button
             key={shop.id}
             onClick={() => setSelectedShop(shop.id)}
-            className={`bg-white p-4 rounded-lg shadow-sm border-l-4 transition-all text-left flex justify-between items-center ${selectedShop === shop.id ? 'border-indigo-600 ring-1 ring-indigo-600' : 'border-gray-200'}`}
+            className={`p-4 rounded-lg shadow-sm border-l-4 transition-all text-left flex justify-between items-center ${
+              selectedShop === shop.id
+                ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-600 ring-1 ring-indigo-600'
+                : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}
           >
             <div className="flex items-center space-x-3">
-              <Store className="w-5 h-5 text-indigo-600" />
-              <span className="font-semibold text-sm">{shop.name}</span>
+              <Store className={`w-5 h-5 ${selectedShop === shop.id ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-500'}`} />
+              <span className={`font-semibold text-sm ${selectedShop === shop.id ? 'text-indigo-900 dark:text-indigo-100' : 'text-gray-700 dark:text-gray-300'}`}>{shop.name}</span>
             </div>
-            <ChevronRight className="w-4 h-4 text-gray-400" />
+            <ChevronRight className={`w-4 h-4 ${selectedShop === shop.id ? 'text-indigo-400' : 'text-gray-400 dark:text-gray-600'}`} />
           </button>
         ))}
       </div>
 
       {selectedShop && (
-        <div className="bg-white shadow-sm rounded-lg overflow-hidden mt-6">
-          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-gray-900 flex items-center">
-              <ShoppingCart className="w-4 h-4 mr-2 text-indigo-600" />
+        <div className="bg-white dark:bg-gray-800 shadow-sm rounded-lg overflow-hidden mt-6 border border-gray-200 dark:border-gray-700">
+          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex items-center justify-between">
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center">
+              <ShoppingCart className="w-4 h-4 mr-2 text-indigo-600 dark:text-indigo-400" />
               {shops.find(s => s.id === selectedShop)?.name} Orders
             </h3>
           </div>
-          <ul className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-700 max-h-96 overflow-y-auto">
             {shopOrders.length > 0 ? (
               shopOrders.map((order) => (
-                <li key={order.id} className="px-4 py-3">
+                <li key={order.id} className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-gray-700 font-medium">{order.lens_details?.name}</p>
+                    <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">{order.lens_details?.name}</p>
                     <div className="text-right">
-                      <p className="text-xs font-bold text-indigo-600">{order.quantity} Pair</p>
-                      <p className="text-[10px] text-gray-400">{new Date(order.created_at).toLocaleDateString()}</p>
+                      <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{order.quantity} Pair</p>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500">{new Date(order.created_at).toLocaleDateString()}</p>
                     </div>
                   </div>
                 </li>
               ))
             ) : (
-              <li className="px-4 py-6 text-center text-xs text-gray-500">No orders found for this shop</li>
+              <li className="px-4 py-10 text-center text-xs text-gray-500 dark:text-gray-400">No orders found for this shop</li>
             )}
           </ul>
         </div>

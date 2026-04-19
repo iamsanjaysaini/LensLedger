@@ -174,7 +174,6 @@ function AppContent({ session, setSession, isConfigured, isMenuOpen, setIsMenuOp
           </Routes>
         </main>
       </div>
-    </Router>
   );
 }
 

@@ -321,13 +321,13 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <table className="divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800/50 text-center">
               <tr>
-                <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Description</th>
-                <th className="px-2 py-3 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Stock</th>
-                <th className="px-2 py-3 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Update</th>
-                <th className="px-4 py-3 text-right text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Actions</th>
+                <th className="px-2 py-2 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Description</th>
+                <th className="px-1 py-2 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Stock</th>
+                <th className="px-1 py-2 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Update</th>
+                <th className="px-2 py-2 text-right text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -338,25 +338,25 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 const origQty = originalStock[key] || 0;
 
                 return (
-                  <tr key={p} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                    <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>
-                    <td className="px-2 py-3 whitespace-nowrap text-xs text-center text-gray-400 dark:text-gray-500">{origQty.toFixed(2)}</td>
-                    <td className={`px-2 py-3 whitespace-nowrap text-xs text-center font-bold ${delta === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                  <tr key={p} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-50/50 dark:even:bg-gray-800/50">
+                    <td className="px-2 py-2 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>
+                    <td className="px-1 py-2 whitespace-nowrap text-xs text-center text-gray-400 dark:text-gray-500">{origQty.toFixed(2)}</td>
+                    <td className={`px-1 py-2 whitespace-nowrap text-xs text-center font-bold ${delta === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-indigo-600 dark:text-indigo-400'}`}>
                       {delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right">
-                      <div className="flex justify-end gap-2">
+                    <td className="px-2 py-2 whitespace-nowrap text-right">
+                      <div className="flex justify-end gap-1.5">
                         <button
                           onClick={() => handleQuantityChange(p, selectedCyl, selectedAxis, -0.5)}
-                          className="p-1.5 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                          className="p-1 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
                         >
-                          <Minus className="w-4 h-4" />
+                          <Minus className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleQuantityChange(p, selectedCyl, selectedAxis, 0.5)}
-                          className="p-1.5 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
+                          className="p-1 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
                         >
-                          <Plus className="w-4 h-4" />
+                          <Plus className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
-  generatePowerList,
+  generateLensRows,
   MATERIALS,
   VISIONS,
   DEFAULT_COATINGS,
@@ -24,17 +24,14 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [coatings, setCoatings] = useState<string[]>(['HC']);
   const [sign, setSign] = useState<Sign>('-');
   const [powerType, setPowerType] = useState<PowerType>('SPH');
-  const [selectedCyl, setSelectedCyl] = useState('0.25');
+  const [compoundLimit, setCompoundLimit] = useState('2.0');
   const [selectedAxis, setSelectedAxis] = useState<number | undefined>(undefined);
   const [customCoating, setCustomCoating] = useState('');
   const [availableCoatings, setAvailableCoatings] = useState(DEFAULT_COATINGS);
   const [deltas, setDeltas] = useState<Record<string, { qty: number, name: string }>>({});
   const [loading, setLoading] = useState(false);
 
-  // SPH power list (includes 0.00 if SPH type, but for Compound it should ideally be 0.25+)
-  const sphList = generatePowerList(powerType === 'SPH');
-  // CYL power list (always excludes 0.00 as per requirement)
-  const cylList = generatePowerList(false);
+  const lensRows = generateLensRows(powerType, compoundLimit);
 
   useEffect(() => {
     async function fetchShops() {
@@ -53,8 +50,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     fetchShops();
   }, [isDemo]);
 
-  const handleQuantityChange = (sph: string, name: string, delta: number) => {
-    const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${sph}-${selectedCyl}-${selectedAxis || ''}-${coatings.join(',')}`;
+  const handleQuantityChange = (sph: string, cyl: string, name: string, delta: number) => {
+    const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${sph}-${cyl}-${selectedAxis || ''}-${coatings.join(',')}`;
     const current = deltas[key] || { qty: 0, name };
     const newQty = Math.max(0, current.qty + delta);
     if (newQty === 0) {
@@ -217,7 +214,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   };
 
   const showAxis = (vision === 'KT' || vision === 'Prograssive') && (powerType !== 'SPH');
-  const showCylSelector = powerType !== 'SPH';
 
   return (
     <div className="space-y-4">
@@ -281,7 +277,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                             onClick={() => {
                                 setPowerType(type as PowerType);
                                 if (type === 'SPH') setSelectedAxis(undefined);
-                                if (type !== 'SPH' && selectedCyl === '0.00') setSelectedCyl('0.25');
                             }}
                             className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}
                         >
@@ -297,12 +292,23 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                     <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
                 </div>
             </div>
-            {showCylSelector && (
+            {(powerType === 'Compound' || powerType === 'Cross Compound') && (
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Power</label>
-                    <select value={selectedCyl} onChange={(e) => setSelectedCyl(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]">
-                        {cylList.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Range</label>
+                    <div className="flex gap-1.5 mt-1">
+                        <button
+                            onClick={() => setCompoundLimit('2.0')}
+                            className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '2.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}
+                        >
+                            upto 2.0 cyl
+                        </button>
+                        <button
+                            onClick={() => setCompoundLimit('4.0')}
+                            className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '4.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}
+                        >
+                            upto 4 cyl
+                        </button>
+                    </div>
                 </div>
             )}
             {showAxis && (
@@ -360,23 +366,23 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {sphList.map((p) => {
-                const name = formatLensName(material, vision, sign, powerType, p, selectedCyl, coatings, selectedAxis);
-                const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${p}-${selectedCyl}-${selectedAxis || ''}-${coatings.join(',')}`;
+              {lensRows.map((row) => {
+                const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, selectedAxis);
+                const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${row.sph}-${row.cyl}-${selectedAxis || ''}-${coatings.join(',')}`;
                 const qty = deltas[key]?.qty || 0;
 
                 return (
-                  <tr key={p} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
+                  <tr key={`${row.sph}-${row.cyl}`} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>
                     <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${qty > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}`}>
                       {qty.toFixed(2)}
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
-                        <button onClick={() => handleQuantityChange(p, name, -0.5)} className="p-1 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5)} className="p-1 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
                           <Minus className="w-3 h-3" />
                         </button>
-                        <button onClick={() => handleQuantityChange(p, name, 0.5)} className="p-1 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5)} className="p-1 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
                           <Plus className="w-3 h-3" />
                         </button>
                       </div>

@@ -29,7 +29,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [sign, setSign] = useState<Sign>('-');
   const [powerType, setPowerType] = useState<PowerType>('SPH');
   const [compoundLimit, setCompoundLimit] = useState('2.0');
-  const [selectedAdd, setSelectedAdd] = useState<string>('1.00');
   const [rowAxes, setRowAxes] = useState<Record<string, number>>({});
   const [customCoating, setCustomCoating] = useState('');
   const [availableCoatings, setAvailableCoatings] = useState(DEFAULT_COATINGS);
@@ -44,13 +43,13 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     if (defaultAxis !== undefined) {
       const newAxes: Record<string, number> = {};
       lensRows.forEach(row => {
-        newAxes[`${row.sph}-${row.cyl}`] = defaultAxis;
+        newAxes[`${row.sph}-${row.cyl}-${row.add || ''}`] = defaultAxis;
       });
       setRowAxes(newAxes);
     } else {
       setRowAxes({});
     }
-  }, [vision, sign, powerType]);
+  }, [vision, sign, powerType, lensRows]);
 
   useEffect(() => {
     async function fetchShops() {
@@ -69,8 +68,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     fetchShops();
   }, [isDemo]);
 
-  const handleQuantityChange = (sph: string, cyl: string, name: string, delta: number, axis?: number) => {
-    const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${sph}-${cyl}-${axis || ''}-${coatings.join(',')}-${isKTOrProg ? selectedAdd : ''}`;
+  const handleQuantityChange = (sph: string, cyl: string, name: string, delta: number, axis?: number, add?: string) => {
+    const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${sph}-${cyl}-${axis || ''}-${coatings.join(',')}-${isKTOrProg ? add : ''}`;
     const current = deltas[key] || { qty: 0, name };
     const newQty = Math.max(0, current.qty + delta);
     if (newQty === 0) {
@@ -330,14 +329,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                     <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
                 </div>
             </div>
-            {isKTOrProg && (
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">ADD</label>
-                    <select value={selectedAdd} onChange={(e) => setSelectedAdd(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]">
-                        {generatePowerList(false, 3.0).filter((p: string) => parseFloat(p) >= 1.0).map((p: string) => <option key={p} value={p}>+{p}</option>)}
-                    </select>
-                </div>
-            )}
             {(powerType === 'Compound' || powerType === 'Cross Compound') && !isKTOrProg && (
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Range</label>
@@ -405,14 +396,14 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {lensRows.map((row) => {
-                const rowKey = `${row.sph}-${row.cyl}`;
+                const rowKey = `${row.sph}-${row.cyl}-${row.add || ''}`;
                 const rowAxis = rowAxes[rowKey];
-                const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, rowAxis, isKTOrProg ? selectedAdd : undefined);
-                const stateKey = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${row.sph}-${row.cyl}-${rowAxis || ''}-${coatings.join(',')}-${isKTOrProg ? selectedAdd : ''}`;
+                const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, rowAxis, row.add);
+                const stateKey = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${row.sph}-${row.cyl}-${rowAxis || ''}-${coatings.join(',')}-${isKTOrProg ? row.add : ''}`;
                 const qty = deltas[stateKey]?.qty || 0;
 
                 return (
-                  <tr key={`${row.sph}-${row.cyl}`} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
+                  <tr key={rowKey} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>
                     {powerType !== 'SPH' && (
                         <td className="px-1 py-1.5 text-center">
@@ -431,10 +422,10 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
-                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5, rowAxis)} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5, rowAxis, row.add)} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
                           <Minus className="w-6 h-6" />
                         </button>
-                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5, rowAxis)} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5, rowAxis, row.add)} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
                           <Plus className="w-6 h-6" />
                         </button>
                       </div>

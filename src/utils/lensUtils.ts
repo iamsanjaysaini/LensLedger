@@ -36,18 +36,28 @@ export function generatePowerList(includeZero: boolean = true, max: number = 6.0
 }
 
 export function generateLensRows(powerType: PowerType, compoundLimit: string = '2.0', vision: Vision = 'single vision') {
-  const rows: { sph: string, cyl: string }[] = [];
+  const rows: { sph: string, cyl: string, add?: string }[] = [];
   const isKT = vision === 'KT';
   const isProg = vision === 'Prograssive';
   const isKTOrProg = isKT || isProg;
 
+  const adds = isKTOrProg ? generatePowerList(false, 3.0).filter(p => parseFloat(p) >= 1.0) : [undefined];
+
   if (powerType === 'SPH') {
     const sphMax = isKT ? 3.0 : 6.0;
     const sphs = generatePowerList(true, sphMax);
-    sphs.forEach(s => rows.push({ sph: s, cyl: '0.00' }));
+    sphs.forEach(s => {
+      adds.forEach(add => {
+        rows.push({ sph: s, cyl: '0.00', add });
+      });
+    });
   } else if (powerType === 'CYL') {
     const cyls = generatePowerList(false, 2.0);
-    cyls.forEach(c => rows.push({ sph: '0.00', cyl: c }));
+    cyls.forEach(c => {
+      adds.forEach(add => {
+        rows.push({ sph: '0.00', cyl: c, add });
+      });
+    });
   } else if (powerType === 'Compound' || powerType === 'Cross Compound') {
     let cylStart = 0.25;
     let cylEnd = 2.0;
@@ -61,9 +71,14 @@ export function generateLensRows(powerType: PowerType, compoundLimit: string = '
 
     for (let s = 0.25; s <= sphMax; s += 0.25) {
       for (let c = cylStart; c <= cylEnd; c += 0.25) {
-        rows.push({
-          sph: s.toFixed(2),
-          cyl: c.toFixed(2)
+        if (powerType === 'Cross Compound' && s === 0.25 && c === 0.25) continue;
+
+        adds.forEach(add => {
+          rows.push({
+            sph: s.toFixed(2),
+            cyl: c.toFixed(2),
+            add
+          });
         });
       }
     }

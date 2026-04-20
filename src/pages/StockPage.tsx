@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
   generatePowerList,
+  getDefaultAxis,
   MATERIALS,
   VISIONS,
   DEFAULT_COATINGS,
@@ -36,6 +37,19 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
   const lensRows = generateLensRows(powerType, compoundLimit, vision);
+
+  useEffect(() => {
+    const defaultAxis = getDefaultAxis(vision, sign, powerType);
+    if (defaultAxis !== undefined) {
+      const newAxes: Record<string, number> = {};
+      lensRows.forEach(row => {
+        newAxes[`${row.sph}-${row.cyl}`] = defaultAxis;
+      });
+      setRowAxes(newAxes);
+    } else {
+      setRowAxes({});
+    }
+  }, [vision, sign, powerType]);
 
   useEffect(() => {
     async function fetchShops() {
@@ -371,15 +385,15 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                       <div className="flex justify-end gap-1">
                         <button
                           onClick={() => handleQuantityChange(row.sph, row.cyl, rowAxis, -0.5)}
-                          className="p-2 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                          className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
                         >
-                          <Minus className="w-5 h-5" />
+                          <Minus className="w-6 h-6" />
                         </button>
                         <button
                           onClick={() => handleQuantityChange(row.sph, row.cyl, rowAxis, 0.5)}
-                          className="p-2 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
+                          className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
                         >
-                          <Plus className="w-5 h-5" />
+                          <Plus className="w-6 h-6" />
                         </button>
                       </div>
                     </td>

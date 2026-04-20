@@ -5,7 +5,7 @@ import StockPage from './pages/StockPage';
 import OrderPage from './pages/OrderPage';
 import SellPage from './pages/SellPage';
 import Auth from './components/Auth';
-import { LayoutDashboard, Package, ShoppingCart, LogOut, Menu, X, Tag } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, LogOut, Tag } from 'lucide-react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 
 function App() {

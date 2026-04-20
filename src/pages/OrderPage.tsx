@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
+  generatePowerList,
   MATERIALS,
   VISIONS,
   DEFAULT_COATINGS,
@@ -300,7 +301,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                             key={type}
                             onClick={() => {
                                 setPowerType(type as PowerType);
-                                if (type === 'SPH') setSelectedAxis(undefined);
                             }}
                             className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}
                         >
@@ -320,7 +320,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">ADD</label>
                     <select value={selectedAdd} onChange={(e) => setSelectedAdd(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]">
-                        {generatePowerList(false, 3.0).filter(p => parseFloat(p) >= 1.0).map(p => <option key={p} value={p}>+{p}</option>)}
+                        {generatePowerList(false, 3.0).filter((p: string) => parseFloat(p) >= 1.0).map((p: string) => <option key={p} value={p}>+{p}</option>)}
                     </select>
                 </div>
             )}

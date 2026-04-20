@@ -79,48 +79,52 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
   async function fetchStock() {
     setLoading(true);
-    let query = supabase
-      .from('lens_stock')
-      .select('*')
-      .eq('shop_id', selectedShop)
-      .eq('material', material)
-      .eq('vision', vision)
-      .eq('sign', sign)
-      .eq('power_type', powerType);
+    try {
+      let query = supabase
+        .from('lens_stock')
+        .select('*')
+        .eq('shop_id', selectedShop)
+        .eq('material', material)
+        .eq('vision', vision)
+        .eq('sign', sign)
+        .eq('power_type', powerType);
 
-    if (coatings.length > 0) {
-        query = query.contains('coatings', coatings);
+      query = query.eq('coatings', coatings);
+
+      if (powerType === 'SPH') {
+          query = query.eq('cyl', 0);
+      } else if (powerType === 'CYL') {
+          query = query.gt('cyl', 0).lte('cyl', 6.0);
+      } else {
+          // Compound / Cross Compound
+          if (compoundLimit === '2.0') {
+              query = query.gte('cyl', 0.25).lte('cyl', 2.0);
+          } else {
+              query = query.gte('cyl', 2.25).lte('cyl', 4.0);
+          }
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const stockMap: Record<string, number> = {};
+      if (data) {
+        data.forEach((item) => {
+          // Use colon as separator to avoid issues with negative numbers
+          const key = `${item.sph.toFixed(2)}:${item.cyl.toFixed(2)}:${item.axis || ''}:${item.addition ? item.addition.toFixed(2) : ''}`;
+          stockMap[key] = Number(item.quantity);
+        });
+      }
+      setOriginalStock(stockMap);
+    } catch (error) {
+      console.error("Fetch error:", error);
+    } finally {
+      setLoading(false);
     }
-
-    if (powerType === 'SPH') {
-        query = query.eq('cyl', 0);
-    } else if (powerType === 'CYL') {
-        query = query.gt('cyl', 0).lte('cyl', 6.0);
-    } else {
-        // Compound / Cross Compound
-        if (compoundLimit === '2.0') {
-            query = query.gte('cyl', 0.25).lte('cyl', 2.0);
-        } else {
-            query = query.gte('cyl', 2.25).lte('cyl', 4.0);
-        }
-    }
-
-    const { data, error } = await query;
-    if (error) console.error("Fetch error:", error);
-
-    const stockMap: Record<string, number> = {};
-    if (data) {
-      data.forEach((item) => {
-        const key = `${item.sph.toFixed(2)}-${item.cyl.toFixed(2)}-${item.axis || ''}-${item.addition ? item.addition.toFixed(2) : ''}`;
-        stockMap[key] = Number(item.quantity);
-      });
-    }
-    setOriginalStock({ ...stockMap });
-    setLoading(false);
   }
 
   const handleQuantityChange = (sph: string, cyl: string, axis: number | undefined, add: string | undefined, delta: number) => {
-    const key = `${parseFloat(sph).toFixed(2)}-${parseFloat(cyl).toFixed(2)}-${axis || ''}-${add || ''}`;
+    const key = `${parseFloat(sph).toFixed(2)}:${parseFloat(cyl).toFixed(2)}:${axis || ''}:${add || ''}`;
     const currentDelta = deltas[key] || 0;
     const newDelta = currentDelta + delta;
     setDeltas({ ...deltas, [key]: newDelta });
@@ -131,15 +135,19 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       alert('Demo Mode: Stock changes are not saved to the database.');
       return;
     }
-    setLoading(true);
 
-    const entries = Object.entries(deltas);
+    const entries = Object.entries(deltas).filter(([_, d]) => d !== 0);
+    if (entries.length === 0) {
+      alert('No changes to save.');
+      return;
+    }
+
+    setLoading(true);
     let updatedCount = 0;
+    let lastError = null;
 
     for (const [key, delta] of entries) {
-      if (delta === 0) continue;
-
-      const [sphStr, cylStr, axisStr, addStr] = key.split('-');
+      const [sphStr, cylStr, axisStr, addStr] = key.split(':');
       const currentQty = originalStock[key] || 0;
       const newQty = Math.max(0, currentQty + delta);
 
@@ -160,18 +168,24 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       const { error } = await supabase.from('lens_stock').upsert(update, {
           onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings'
       });
-      if (error) console.error("Save error:", error);
-      else updatedCount++;
+      if (error) {
+        console.error("Save error:", error);
+        lastError = error;
+      } else {
+        updatedCount++;
+      }
     }
 
+    setLoading(false);
     if (updatedCount > 0) {
-        alert('Stock updated successfully!');
+        alert(`Stock updated successfully! (${updatedCount} items)`);
         await fetchStock();
         setDeltas({});
+    } else if (lastError) {
+        alert('Failed to save changes. Error: ' + (lastError as any).message);
     } else {
-        alert('No changes to save.');
+        alert('No changes were applied.');
     }
-    setLoading(false);
   };
 
   const toggleCoating = (c: string) => {
@@ -354,7 +368,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 const rowKey = `${row.sph}-${row.cyl}-${row.add || ''}`;
                 const rowAxis = rowAxes[rowKey];
                 const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, rowAxis, row.add);
-                const key = `${parseFloat(row.sph).toFixed(2)}-${parseFloat(row.cyl).toFixed(2)}-${rowAxis || ''}-${row.add || ''}`;
+                const key = `${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}:${rowAxis || ''}:${row.add || ''}`;
                 const delta = deltas[key] || 0;
                 const origQty = originalStock[key] || 0;
 

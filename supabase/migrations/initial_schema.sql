@@ -55,3 +55,21 @@ BEGIN
         CREATE POLICY "Allow authenticated read/write on orders" ON orders FOR ALL TO authenticated USING (true) WITH CHECK (true);
     END IF;
 END $$;
+
+-- Create sales table
+CREATE TABLE IF NOT EXISTS sales (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    shop_id UUID REFERENCES shops(id) ON DELETE CASCADE,
+    lens_details JSONB NOT NULL,
+    quantity DECIMAL(6,2) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow authenticated read/write on sales') THEN
+        CREATE POLICY "Allow authenticated read/write on sales" ON sales FOR ALL TO authenticated USING (true) WITH CHECK (true);
+    END IF;
+END $$;

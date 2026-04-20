@@ -128,19 +128,17 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         setCoatings([...coatings, c]);
       }
     } else {
-      if (coatings.includes(c)) {
-        setCoatings(coatings.filter(item => item !== c));
-      } else {
-        const photoGreySelected = coatings.includes('Photo Grey');
-        setCoatings(photoGreySelected ? ['Photo Grey', c] : [c]);
-      }
+      // Non-Photo Grey coatings are mutually exclusive and one is compulsory
+      const photoGreySelected = coatings.includes('Photo Grey');
+      setCoatings(photoGreySelected ? ['Photo Grey', c] : [c]);
     }
   };
 
   const addCustomCoating = () => {
     if (customCoating && !availableCoatings.includes(customCoating)) {
       setAvailableCoatings([...availableCoatings, customCoating]);
-      setCoatings([...coatings, customCoating]);
+      const photoGreySelected = coatings.includes('Photo Grey');
+      setCoatings(photoGreySelected ? ['Photo Grey', customCoating] : [customCoating]);
       setCustomCoating('');
     }
   };

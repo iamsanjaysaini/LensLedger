@@ -175,10 +175,19 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   };
 
   const toggleCoating = (c: string) => {
-    if (coatings.includes(c)) {
-      setCoatings(coatings.filter(item => item !== c));
+    if (c === 'Photo Grey') {
+      if (coatings.includes(c)) {
+        setCoatings(coatings.filter(item => item !== c));
+      } else {
+        setCoatings([...coatings, c]);
+      }
     } else {
-      setCoatings([...coatings, c]);
+      if (coatings.includes(c)) {
+        setCoatings(coatings.filter(item => item !== c));
+      } else {
+        const photoGreySelected = coatings.includes('Photo Grey');
+        setCoatings(photoGreySelected ? ['Photo Grey', c] : [c]);
+      }
     }
   };
 

@@ -12,7 +12,9 @@ import {
   Sign,
   KT_AXIS,
   PROGRESSIVE_AXIS,
-  Shop
+  Shop,
+  formatReportQty,
+  sortLensNames
 } from '../utils/lensUtils';
 import { Plus, Minus, ShoppingCart, FileText } from 'lucide-react';
 
@@ -128,7 +130,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         summary[name] = (summary[name] || 0) + Number(o.quantity);
     });
 
-    const items = Object.entries(summary).sort((a, b) => a[0].localeCompare(b[0]));
+    const items = Object.entries(summary).sort((a, b) => sortLensNames(a[0], b[0]));
     const dateStr = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
 
     const half = Math.ceil(items.length / 2);
@@ -173,7 +175,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>Lens Power / Details</th>
+                                            <th>Lens Power</th>
                                             <th class="qty-col">Qty</th>
                                         </tr>
                                     </thead>
@@ -181,7 +183,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                                         ${col1.map(item => `
                                             <tr>
                                                 <td>${item[0]}</td>
-                                                <td class="qty-col">${item[1]}</td>
+                                                <td class="qty-col">${formatReportQty(item[1])}</td>
                                             </tr>
                                         `).join('')}
                                     </tbody>
@@ -191,7 +193,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>Lens Power / Details</th>
+                                            <th>Lens Power</th>
                                             <th class="qty-col">Qty</th>
                                         </tr>
                                     </thead>
@@ -199,7 +201,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                                         ${col2.map(item => `
                                             <tr>
                                                 <td>${item[0]}</td>
-                                                <td class="qty-col">${item[1]}</td>
+                                                <td class="qty-col">${formatReportQty(item[1])}</td>
                                             </tr>
                                         `).join('')}
                                     </tbody>

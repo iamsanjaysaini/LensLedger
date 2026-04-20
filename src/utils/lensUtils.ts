@@ -127,7 +127,7 @@ export function formatReportQty(qty: number): string {
 
   if (res === '') res = '0';
 
-  return `${res} Pair`;
+  return res;
 }
 
 export function sortLensNames(a: string, b: string): number {

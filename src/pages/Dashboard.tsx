@@ -66,9 +66,10 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     const items = Object.entries(summary).sort((a, b) => sortLensNames(a[0], b[0]));
     const dateStr = new Date().toLocaleDateString('en-GB');
 
-    const half = Math.ceil(items.length / 2);
-    const col1 = items.slice(0, half);
-    const col2 = items.slice(half);
+    // Threshold to fill left column before moving to right
+    const MAX_ROWS_PER_COL = 40;
+    const col1 = items.slice(0, MAX_ROWS_PER_COL);
+    const col2 = items.slice(MAX_ROWS_PER_COL);
 
     const win = window.open('', '_blank');
     if (win) {

@@ -144,16 +144,20 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                     </div>
                     <script>
                         function downloadJPG() {
-                            const btn = event.target;
-                            btn.disabled = true;
-                            btn.innerText = 'Generating...';
+                            const btn = document.querySelector('button[onclick="downloadJPG()"]');
+                            if (btn) {
+                                btn.disabled = true;
+                                btn.innerText = 'Generating...';
+                            }
                             html2canvas(document.querySelector("#capture"), { scale: 2 }).then(canvas => {
                                 const link = document.createElement('a');
                                 link.download = 'Combined_Order_${dateStr.replace(/\//g, '-')}.jpg';
                                 link.href = canvas.toDataURL('image/jpeg', 0.9);
                                 link.click();
-                                btn.disabled = false;
-                                btn.innerText = 'Download JPG';
+                                if (btn) {
+                                    btn.disabled = false;
+                                    btn.innerText = 'Download JPG';
+                                }
                             });
                         }
                     </script>

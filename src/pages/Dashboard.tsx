@@ -58,8 +58,6 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     const summary: Record<string, number> = {};
     orders.forEach(o => {
         let name = o.lens_details.name;
-        // Remove material categories
-        name = name.replace(/\b(CR|Poly|Glass)\b/gi, '').trim().replace(/\s+/g, ' ');
         summary[name] = (summary[name] || 0) + Number(o.quantity);
     });
 
@@ -84,9 +82,9 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                         .controls { background: #333; padding: 10px; display: flex; gap: 10px; justify-content: center; position: sticky; top: 0; z-index: 100; }
                         .btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; }
                         .btn:hover { background: #4338ca; }
-                        .page-container { background: white; width: 210mm; min-height: 297mm; margin: 20px auto; padding: 15mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); box-sizing: border-box; }
+                        .page-container { background: white; width: 210mm; min-height: 297mm; margin: 20px auto; padding: 10mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); box-sizing: border-box; }
                         .header { border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; font-size: 16px; }
-                        .columns { display: flex; gap: 20px; }
+                        .columns { display: flex; gap: 10px; }
                         .column { flex: 1; }
                         table { width: 100%; border-collapse: collapse; }
                         th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }

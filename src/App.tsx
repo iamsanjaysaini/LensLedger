@@ -11,7 +11,6 @@ import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } f
 function App() {
   const [session, setSession] = useState<any>(null);
   const [isConfigured, setIsConfigured] = useState(true);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_URL === 'https://placeholder-url.supabase.co') {
@@ -44,17 +43,13 @@ function App() {
 
   return (
     <Router>
-      <AppContent session={session} setSession={setSession} isConfigured={isConfigured} isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} />
+      <AppContent session={session} setSession={setSession} isConfigured={isConfigured} />
     </Router>
   );
 }
 
-function AppContent({ session, setSession, isConfigured, isMenuOpen, setIsMenuOpen }: any) {
+function AppContent({ session, setSession, isConfigured }: any) {
   const location = useLocation();
-
-  useEffect(() => {
-    setIsMenuOpen(false);
-  }, [location, setIsMenuOpen]);
 
   return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">

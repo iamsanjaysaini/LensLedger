@@ -22,10 +22,11 @@ CREATE TABLE IF NOT EXISTS lens_stock (
     sph DECIMAL(4,2) DEFAULT 0.00,
     cyl DECIMAL(4,2) DEFAULT 0.00,
     axis INTEGER,
+    addition DECIMAL(4,2), -- for KT/Progressive
     coatings TEXT[], -- Array of coatings
     quantity DECIMAL(6,2) DEFAULT 0.00,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(shop_id, material, vision, sign, power_type, sph, cyl, axis, coatings)
+    UNIQUE(shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings)
 );
 
 -- Create orders table

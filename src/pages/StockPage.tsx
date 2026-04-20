@@ -25,14 +25,16 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [sign, setSign] = useState<Sign>('-');
   const [powerType, setPowerType] = useState<PowerType>('SPH');
   const [compoundLimit, setCompoundLimit] = useState('2.0');
-  const [selectedAxis, setSelectedAxis] = useState<number | undefined>(undefined);
+  const [selectedAdd, setSelectedAdd] = useState<string>('1.00');
+  const [rowAxes, setRowAxes] = useState<Record<string, number>>({});
   const [customCoating, setCustomCoating] = useState('');
   const [availableCoatings, setAvailableCoatings] = useState(DEFAULT_COATINGS);
   const [deltas, setDeltas] = useState<Record<string, number>>({});
   const [originalStock, setOriginalStock] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
 
-  const lensRows = generateLensRows(powerType, compoundLimit);
+  const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
+  const lensRows = generateLensRows(powerType, compoundLimit, vision);
 
   useEffect(() => {
     async function fetchShops() {
@@ -59,7 +61,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       fetchStock();
     }
     setDeltas({}); // Reset deltas when filters change
-  }, [selectedShop, material, vision, coatings, sign, powerType, compoundLimit, selectedAxis, isDemo]);
+  }, [selectedShop, material, vision, coatings, sign, powerType, compoundLimit, selectedAdd, isDemo]);
 
   async function fetchStock() {
     setLoading(true);
@@ -71,6 +73,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       .eq('vision', vision)
       .eq('sign', sign)
       .eq('power_type', powerType);
+
+    if (isKTOrProg) {
+      query = query.eq('addition', parseFloat(selectedAdd));
+    }
 
     if (coatings.length > 0) {
         query = query.contains('coatings', coatings);
@@ -87,12 +93,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         } else {
             query = query.gte('cyl', 2.25).lte('cyl', 4.0);
         }
-    }
-
-    if (selectedAxis !== undefined) {
-        query = query.eq('axis', selectedAxis);
-    } else {
-        query = query.is('axis', null);
     }
 
     const { data, error } = await query;
@@ -142,12 +142,13 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         sph: parseFloat(sphStr),
         cyl: parseFloat(cylStr),
         axis: axisStr ? parseInt(axisStr) : null,
+        addition: isKTOrProg ? parseFloat(selectedAdd) : null,
         coatings,
         quantity: newQty
       };
 
       const { error } = await supabase.from('lens_stock').upsert(update, {
-          onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, coatings'
+          onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings'
       });
       if (error) console.error("Save error:", error);
       else updatedCount++;
@@ -230,7 +231,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
               value={vision}
               onChange={(e) => {
                   setVision(e.target.value as Vision);
-                  setSelectedAxis(undefined);
+                  setRowAxes({});
               }}
               className="block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]"
             >
@@ -239,7 +240,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div className="md:col-span-1">
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Power Type</label>
                 <div className="flex flex-wrap gap-1 mt-1">
@@ -248,7 +249,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                             key={type}
                             onClick={() => {
                                 setPowerType(type as PowerType);
-                                if (type === 'SPH') setSelectedAxis(undefined);
                             }}
                             className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}
                         >
@@ -283,18 +283,11 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                     </div>
                 </div>
             )}
-            {showAxis && (
+            {isKTOrProg && (
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Axis</label>
-                    <select
-                        value={selectedAxis || ''}
-                        onChange={(e) => setSelectedAxis(e.target.value ? parseInt(e.target.value) : undefined)}
-                        className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]"
-                    >
-                        <option value="">Select Axis</option>
-                        {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => (
-                            <option key={a} value={a}>{a}</option>
-                        ))}
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">ADD</label>
+                    <select value={selectedAdd} onChange={(e) => setSelectedAdd(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]">
+                        {generatePowerList(false, 3.0).filter(p => parseFloat(p) >= 1.0).map(p => <option key={p} value={p}>+{p}</option>)}
                     </select>
                 </div>
             )}
@@ -339,6 +332,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             <thead className="bg-gray-50 dark:bg-gray-800/80 text-center">
               <tr>
                 <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Description</th>
+                {powerType !== 'SPH' && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Axis</th>}
                 <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Stock</th>
                 <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Update</th>
                 <th className="px-2 py-1.5 text-right text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-20">Actions</th>
@@ -346,14 +340,28 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {lensRows.map((row) => {
-                const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, selectedAxis);
-                const key = `${parseFloat(row.sph).toFixed(2)}-${parseFloat(row.cyl).toFixed(2)}-${selectedAxis || ''}`;
+                const rowKey = `${row.sph}-${row.cyl}`;
+                const rowAxis = rowAxes[rowKey];
+                const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, rowAxis, isKTOrProg ? selectedAdd : undefined);
+                const key = `${parseFloat(row.sph).toFixed(2)}-${parseFloat(row.cyl).toFixed(2)}-${rowAxis || ''}`;
                 const delta = deltas[key] || 0;
                 const origQty = originalStock[key] || 0;
 
                 return (
                   <tr key={`${row.sph}-${row.cyl}`} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>
+                    {powerType !== 'SPH' && (
+                        <td className="px-1 py-1.5 text-center">
+                            <select
+                                value={rowAxis || ''}
+                                onChange={(e) => setRowAxes({ ...rowAxes, [rowKey]: parseInt(e.target.value) })}
+                                className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14"
+                            >
+                                <option value="">-</option>
+                                {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
+                            </select>
+                        </td>
+                    )}
                     <td className="px-1 py-1.5 whitespace-nowrap text-[10px] text-center text-gray-400 dark:text-gray-500">{origQty.toFixed(2)}</td>
                     <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${delta === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-indigo-600 dark:text-indigo-400'}`}>
                       {delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}
@@ -361,13 +369,13 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                     <td className="px-2 py-1.5 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
                         <button
-                          onClick={() => handleQuantityChange(row.sph, row.cyl, selectedAxis, -0.5)}
+                          onClick={() => handleQuantityChange(row.sph, row.cyl, rowAxis, -0.5)}
                           className="p-2 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
                         >
                           <Minus className="w-5 h-5" />
                         </button>
                         <button
-                          onClick={() => handleQuantityChange(row.sph, row.cyl, selectedAxis, 0.5)}
+                          onClick={() => handleQuantityChange(row.sph, row.cyl, rowAxis, 0.5)}
                           className="p-2 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
                         >
                           <Plus className="w-5 h-5" />

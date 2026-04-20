@@ -27,13 +27,15 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [sign, setSign] = useState<Sign>('-');
   const [powerType, setPowerType] = useState<PowerType>('SPH');
   const [compoundLimit, setCompoundLimit] = useState('2.0');
-  const [selectedAxis, setSelectedAxis] = useState<number | undefined>(undefined);
+  const [selectedAdd, setSelectedAdd] = useState<string>('1.00');
+  const [rowAxes, setRowAxes] = useState<Record<string, number>>({});
   const [customCoating, setCustomCoating] = useState('');
   const [availableCoatings, setAvailableCoatings] = useState(DEFAULT_COATINGS);
   const [deltas, setDeltas] = useState<Record<string, { qty: number, name: string }>>({});
   const [loading, setLoading] = useState(false);
 
-  const lensRows = generateLensRows(powerType, compoundLimit);
+  const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
+  const lensRows = generateLensRows(powerType, compoundLimit, vision);
 
   useEffect(() => {
     async function fetchShops() {
@@ -52,8 +54,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     fetchShops();
   }, [isDemo]);
 
-  const handleQuantityChange = (sph: string, cyl: string, name: string, delta: number) => {
-    const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${sph}-${cyl}-${selectedAxis || ''}-${coatings.join(',')}`;
+  const handleQuantityChange = (sph: string, cyl: string, name: string, delta: number, axis?: number) => {
+    const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${sph}-${cyl}-${axis || ''}-${coatings.join(',')}-${isKTOrProg ? selectedAdd : ''}`;
     const current = deltas[key] || { qty: 0, name };
     const newQty = Math.max(0, current.qty + delta);
     if (newQty === 0) {
@@ -125,8 +127,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     const summary: Record<string, number> = {};
     orders.forEach(o => {
         let name = o.lens_details.name;
-        // Remove material categories
-        name = name.replace(/\b(CR|Poly|Glass)\b/gi, '').trim().replace(/\s+/g, ' ');
         summary[name] = (summary[name] || 0) + Number(o.quantity);
     });
 
@@ -151,9 +151,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                         .controls { background: #333; padding: 10px; display: flex; gap: 10px; justify-content: center; position: sticky; top: 0; z-index: 100; }
                         .btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; }
                         .btn:hover { background: #4338ca; }
-                        .page-container { background: white; width: 210mm; min-height: 297mm; margin: 20px auto; padding: 15mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); box-sizing: border-box; }
+                        .page-container { background: white; width: 210mm; min-height: 297mm; margin: 20px auto; padding: 10mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); box-sizing: border-box; }
                         .header { border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; font-size: 16px; }
-                        .columns { display: flex; gap: 20px; }
+                        .columns { display: flex; gap: 10px; }
                         .column { flex: 1; }
                         table { width: 100%; border-collapse: collapse; }
                         th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
@@ -285,7 +285,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Vision</label>
-            <select value={vision} onChange={(e) => { setVision(e.target.value as Vision); setSelectedAxis(undefined); }} className="block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]">
+            <select value={vision} onChange={(e) => { setVision(e.target.value as Vision); setRowAxes({}); }} className="block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]">
               {VISIONS.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
           </div>
@@ -316,7 +316,15 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                     <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
                 </div>
             </div>
-            {(powerType === 'Compound' || powerType === 'Cross Compound') && (
+            {isKTOrProg && (
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">ADD</label>
+                    <select value={selectedAdd} onChange={(e) => setSelectedAdd(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]">
+                        {generatePowerList(false, 3.0).filter(p => parseFloat(p) >= 1.0).map(p => <option key={p} value={p}>+{p}</option>)}
+                    </select>
+                </div>
+            )}
+            {(powerType === 'Compound' || powerType === 'Cross Compound') && !isKTOrProg && (
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Range</label>
                     <div className="flex gap-1.5 mt-1">
@@ -333,15 +341,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                             upto 4 cyl
                         </button>
                     </div>
-                </div>
-            )}
-            {showAxis && (
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Axis</label>
-                    <select value={selectedAxis || ''} onChange={(e) => setSelectedAxis(e.target.value ? parseInt(e.target.value) : undefined)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]">
-                        <option value="">Select Axis</option>
-                        {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
-                    </select>
                 </div>
             )}
         </div>
@@ -385,28 +384,43 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             <thead className="bg-gray-50 dark:bg-gray-800/80 text-center">
               <tr>
                 <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Description</th>
+                {powerType !== 'SPH' && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Axis</th>}
                 <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Qty</th>
                 <th className="px-2 py-1.5 text-right text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-20">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {lensRows.map((row) => {
-                const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, selectedAxis);
-                const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${row.sph}-${row.cyl}-${selectedAxis || ''}-${coatings.join(',')}`;
-                const qty = deltas[key]?.qty || 0;
+                const rowKey = `${row.sph}-${row.cyl}`;
+                const rowAxis = rowAxes[rowKey];
+                const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, rowAxis, isKTOrProg ? selectedAdd : undefined);
+                const stateKey = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${row.sph}-${row.cyl}-${rowAxis || ''}-${coatings.join(',')}-${isKTOrProg ? selectedAdd : ''}`;
+                const qty = deltas[stateKey]?.qty || 0;
 
                 return (
                   <tr key={`${row.sph}-${row.cyl}`} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>
+                    {powerType !== 'SPH' && (
+                        <td className="px-1 py-1.5 text-center">
+                            <select
+                                value={rowAxis || ''}
+                                onChange={(e) => setRowAxes({ ...rowAxes, [rowKey]: parseInt(e.target.value) })}
+                                className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14"
+                            >
+                                <option value="">-</option>
+                                {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
+                            </select>
+                        </td>
+                    )}
                     <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${qty > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}`}>
                       {qty.toFixed(2)}
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
-                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5)} className="p-2 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5, rowAxis)} className="p-2 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
                           <Minus className="w-5 h-5" />
                         </button>
-                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5)} className="p-2 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5, rowAxis)} className="p-2 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
                           <Plus className="w-5 h-5" />
                         </button>
                       </div>

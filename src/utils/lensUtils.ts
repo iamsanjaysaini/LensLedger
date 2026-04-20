@@ -37,10 +37,13 @@ export function generatePowerList(includeZero: boolean = true, max: number = 6.0
 
 export function generateLensRows(powerType: PowerType, compoundLimit: string = '2.0', vision: Vision = 'single vision') {
   const rows: { sph: string, cyl: string }[] = [];
-  const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
+  const isKT = vision === 'KT';
+  const isProg = vision === 'Prograssive';
+  const isKTOrProg = isKT || isProg;
 
   if (powerType === 'SPH') {
-    const sphs = generatePowerList(true, isKTOrProg ? 3.0 : 6.0);
+    const sphMax = isKT ? 3.0 : 6.0;
+    const sphs = generatePowerList(true, sphMax);
     sphs.forEach(s => rows.push({ sph: s, cyl: '0.00' }));
   } else if (powerType === 'CYL') {
     const cyls = generatePowerList(false, 2.0);
@@ -54,7 +57,7 @@ export function generateLensRows(powerType: PowerType, compoundLimit: string = '
       cylEnd = 4.0;
     }
 
-    const sphMax = isKTOrProg ? 3.0 : 6.0;
+    const sphMax = isKT ? 3.0 : 6.0;
 
     for (let s = 0.25; s <= sphMax; s += 0.25) {
       for (let c = cylStart; c <= cylEnd; c += 0.25) {
@@ -67,6 +70,16 @@ export function generateLensRows(powerType: PowerType, compoundLimit: string = '
   }
 
   return rows;
+}
+
+export function getDefaultAxis(vision: Vision, sign: Sign | null, powerType: PowerType): number | undefined {
+  if (vision !== 'KT') return undefined;
+  if (powerType === 'SPH') return undefined;
+
+  if (sign === '+') return 180;
+  if (sign === '-') return 90;
+
+  return undefined;
 }
 
 export function formatLensName(

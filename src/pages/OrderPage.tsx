@@ -86,13 +86,16 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       alert('Demo Mode: Orders are not saved.');
       return;
     }
-    setLoading(true);
+
     const entries = Object.entries(deltas);
     if (entries.length === 0) {
         alert('Please add items to order.');
-        setLoading(false);
         return;
     }
+
+    setLoading(true);
+    let successCount = 0;
+    let lastError = null;
 
     for (const [_, data] of entries) {
       const { error } = await supabase.from('orders').insert({
@@ -100,12 +103,21 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         lens_details: { name: data.name },
         quantity: data.qty
       });
-      if (error) console.error(error);
+      if (error) {
+        console.error(error);
+        lastError = error;
+      } else {
+        successCount++;
+      }
     }
 
-    alert('Orders saved successfully!');
-    setDeltas({});
     setLoading(false);
+    if (successCount > 0) {
+        alert(`Orders saved successfully! (${successCount} items)`);
+        setDeltas({});
+    } else if (lastError) {
+        alert('Failed to save orders. Error: ' + (lastError as any).message);
+    }
   };
 
   const toggleCoating = (c: string) => {
@@ -142,8 +154,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         .gte('created_at', today);
 
     if (!orders || orders.length === 0) {
-        alert('No orders found for today to generate report.');
         setLoading(false);
+        alert('No orders found for today to generate report.');
         return;
     }
 
@@ -161,6 +173,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     const col1 = items.slice(0, MAX_ROWS_PER_COL);
     const col2 = items.slice(MAX_ROWS_PER_COL);
 
+    setLoading(false);
     const win = window.open('', '_blank');
     if (win) {
         win.document.write(`

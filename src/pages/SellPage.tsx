@@ -16,7 +16,7 @@ import {
   PROGRESSIVE_AXIS,
   Shop
 } from '../utils/lensUtils';
-import { Plus, Minus, Tag } from 'lucide-react';
+import { Plus, Tag } from 'lucide-react';
 
 export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -79,48 +79,50 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
 
   async function fetchStock() {
     setLoading(true);
-    let query = supabase
-      .from('lens_stock')
-      .select('*')
-      .eq('shop_id', selectedShop)
-      .eq('material', material)
-      .eq('vision', vision)
-      .eq('sign', sign)
-      .eq('power_type', powerType);
+    try {
+      let query = supabase
+        .from('lens_stock')
+        .select('*')
+        .eq('shop_id', selectedShop)
+        .eq('material', material)
+        .eq('vision', vision)
+        .eq('sign', sign)
+        .eq('power_type', powerType);
 
-    if (coatings.length > 0) {
-        query = query.contains('coatings', coatings);
+    query = query.eq('coatings', coatings);
+
+      if (powerType === 'SPH') {
+          query = query.eq('cyl', 0);
+      } else if (powerType === 'CYL') {
+          query = query.gt('cyl', 0).lte('cyl', 6.0);
+      } else {
+          if (compoundLimit === '2.0') {
+              query = query.gte('cyl', 0.25).lte('cyl', 2.0);
+          } else {
+              query = query.gte('cyl', 2.25).lte('cyl', 4.0);
+          }
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const stockMap: Record<string, number> = {};
+      if (data) {
+        data.forEach((item) => {
+          const key = `${item.sph.toFixed(2)}:${item.cyl.toFixed(2)}:${item.axis || ''}:${item.addition ? item.addition.toFixed(2) : ''}`;
+          stockMap[key] = Number(item.quantity);
+        });
+      }
+      setOriginalStock(stockMap);
+    } catch (error) {
+      console.error("Fetch error:", error);
+    } finally {
+      setLoading(false);
     }
-
-
-    if (powerType === 'SPH') {
-        query = query.eq('cyl', 0);
-    } else if (powerType === 'CYL') {
-        query = query.gt('cyl', 0).lte('cyl', 6.0);
-    } else {
-        if (compoundLimit === '2.0') {
-            query = query.gte('cyl', 0.25).lte('cyl', 2.0);
-        } else {
-            query = query.gte('cyl', 2.25).lte('cyl', 4.0);
-        }
-    }
-
-    const { data, error } = await query;
-    if (error) console.error("Fetch error:", error);
-
-    const stockMap: Record<string, number> = {};
-    if (data) {
-      data.forEach((item) => {
-        const key = `SPH:${item.sph.toFixed(2)}|CYL:${item.cyl.toFixed(2)}|AXIS:${item.axis || ''}|ADD:${item.addition ? item.addition.toFixed(2) : ''}`;
-        stockMap[key] = Number(item.quantity);
-      });
-    }
-    setOriginalStock({ ...stockMap });
-    setLoading(false);
   }
 
   const handleQuantityChange = (sph: string, cyl: string, name: string, delta: number, axis?: number, add?: string) => {
-    const key = `SPH:${parseFloat(sph).toFixed(2)}|CYL:${parseFloat(cyl).toFixed(2)}|AXIS:${axis || ''}|ADD:${isKTOrProg ? add : ''}`;
+    const key = `${parseFloat(sph).toFixed(2)}:${parseFloat(cyl).toFixed(2)}:${axis || ''}:${add || ''}`;
     const current = deltas[key] || { qty: 0, name };
     const newQty = Math.max(0, current.qty + delta);
 
@@ -138,29 +140,20 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
       alert('Demo Mode: Sales are not saved to the database.');
       return;
     }
-    setLoading(true);
 
     const entries = Object.entries(deltas);
     if (entries.length === 0) {
       alert('Please add items to sell.');
-      setLoading(false);
       return;
     }
 
+    setLoading(true);
     let successCount = 0;
+    let lastError = null;
+
     for (const [key, data] of entries) {
-      const parts = key.split('|');
-      const sphStr = parts[0].split(':')[1];
-      const cylStr = parts[1].split(':')[1];
-      const axisStr = parts[2].split(':')[1];
-      const addStr = parts[3]?.split(':')[1];
-
+      const [sphStr, cylStr, axisStr, addStr] = key.split(':');
       const currentStock = originalStock[key] || 0;
-
-      if (currentStock < data.qty) {
-        console.warn(`Insufficient stock for ${data.name}. Current: ${currentStock}, Sale: ${data.qty}`);
-        // Optionally alert user or proceed with negative stock
-      }
 
       // 1. Decrement stock
       const { error: stockError } = await supabase.from('lens_stock').upsert({
@@ -181,6 +174,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
 
       if (stockError) {
         console.error("Stock update error:", stockError);
+        lastError = stockError;
         continue;
       }
 
@@ -193,19 +187,22 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
 
       if (saleError) {
         console.error("Sale record error:", saleError);
+        lastError = saleError;
       } else {
         successCount++;
       }
     }
 
+    setLoading(false);
     if (successCount > 0) {
-      alert('Sales recorded successfully!');
+      alert(`Sales recorded successfully! (${successCount} items)`);
       await fetchStock();
       setDeltas({});
+    } else if (lastError) {
+      alert('Failed to record sales. Error: ' + (lastError as any).message);
     } else {
-      alert('Failed to record sales.');
+      alert('No sales were recorded.');
     }
-    setLoading(false);
   };
 
   const toggleCoating = (c: string) => {
@@ -388,7 +385,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
                 const rowKey = `${row.sph}-${row.cyl}-${row.add || ''}`;
                 const rowAxis = rowAxes[rowKey];
                 const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, rowAxis, row.add);
-                const key = `SPH:${parseFloat(row.sph).toFixed(2)}|CYL:${parseFloat(row.cyl).toFixed(2)}|AXIS:${rowAxis || ''}|ADD:${row.add || ''}`;
+                const key = `${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}:${rowAxis || ''}:${row.add || ''}`;
                 const sellQty = deltas[key]?.qty || 0;
                 const origQty = originalStock[key] || 0;
 
@@ -413,12 +410,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
-                        <button
-                          onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5, rowAxis, row.add)}
-                          className="p-3 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                        >
-                          <Minus className="w-6 h-6" />
-                        </button>
                         <button
                           onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5, rowAxis, row.add)}
                           className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"

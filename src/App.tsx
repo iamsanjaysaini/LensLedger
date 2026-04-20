@@ -3,8 +3,9 @@ import { supabase } from './lib/supabase';
 import Dashboard from './pages/Dashboard';
 import StockPage from './pages/StockPage';
 import OrderPage from './pages/OrderPage';
+import SellPage from './pages/SellPage';
 import Auth from './components/Auth';
-import { LayoutDashboard, Package, ShoppingCart, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, LogOut, Menu, X, Tag } from 'lucide-react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 
 function App() {
@@ -92,6 +93,13 @@ function AppContent({ session, setSession, isConfigured, isMenuOpen, setIsMenuOp
                     <ShoppingCart className="w-4 h-4 mr-2" />
                     Orders
                   </Link>
+                  <Link
+                    to="/sell"
+                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === '/sell' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  >
+                    <Tag className="w-4 h-4 mr-2" />
+                    Sell
+                  </Link>
                 </div>
               </div>
               <div className="hidden sm:flex items-center">
@@ -103,45 +111,42 @@ function AppContent({ session, setSession, isConfigured, isMenuOpen, setIsMenuOp
                   Sign Out
                 </button>
               </div>
-              <div className="flex items-center sm:hidden">
-                <button
-                  onClick={() => setIsMenuOpen(!isMenuOpen)}
-                  className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
-                  aria-label="Open main menu"
-                >
-                  <span className="sr-only">Open main menu</span>
-                  {isMenuOpen ? <X className="block h-6 w-6" /> : <Menu className="block h-6 w-6" />}
-                </button>
-              </div>
             </div>
           </div>
 
-          {/* Mobile menu */}
-          <div className={`${isMenuOpen ? 'block' : 'hidden'} sm:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700`}>
-            <div className="pt-2 pb-3 space-y-1">
+          {/* Mobile menu (Direct Buttons) */}
+          <div className="sm:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-2">
+            <div className="grid grid-cols-4 gap-2">
               <Link
                 to="/"
-                className={`flex items-center px-3 py-2 text-base font-medium ${location.pathname === '/' ? 'bg-indigo-50 dark:bg-indigo-900/50 border-l-4 border-indigo-500 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
               >
-                <LayoutDashboard className="w-5 h-5 mr-3" />
+                <LayoutDashboard className="w-5 h-5 mb-1" />
                 Dashboard
               </Link>
               <Link
                 to="/stock"
-                className={`flex items-center px-3 py-2 text-base font-medium ${location.pathname === '/stock' ? 'bg-indigo-50 dark:bg-indigo-900/50 border-l-4 border-indigo-500 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/stock' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
               >
-                <Package className="w-5 h-5 mr-3" />
+                <Package className="w-5 h-5 mb-1" />
                 Stock
               </Link>
               <Link
                 to="/order"
-                className={`flex items-center px-3 py-2 text-base font-medium ${location.pathname === '/order' ? 'bg-indigo-50 dark:bg-indigo-900/50 border-l-4 border-indigo-500 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/order' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
               >
-                <ShoppingCart className="w-5 h-5 mr-3" />
+                <ShoppingCart className="w-5 h-5 mb-1" />
                 Orders
               </Link>
+              <Link
+                to="/sell"
+                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/sell' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+              >
+                <Tag className="w-5 h-5 mb-1" />
+                Sell
+              </Link>
             </div>
-            <div className="pt-4 pb-3 border-t border-gray-200 dark:border-gray-700">
+            <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
               <div className="flex items-center px-4">
                 <div className="flex-shrink-0">
                   <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center">
@@ -170,6 +175,7 @@ function AppContent({ session, setSession, isConfigured, isMenuOpen, setIsMenuOp
             <Route path="/" element={<Dashboard isDemo={!isConfigured} />} />
             <Route path="/stock" element={<StockPage isDemo={!isConfigured} />} />
             <Route path="/order" element={<OrderPage isDemo={!isConfigured} />} />
+            <Route path="/sell" element={<SellPage isDemo={!isConfigured} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

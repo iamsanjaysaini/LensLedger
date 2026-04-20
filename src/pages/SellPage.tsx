@@ -14,9 +14,9 @@ import {
   PROGRESSIVE_AXIS,
   Shop
 } from '../utils/lensUtils';
-import { Plus, Minus, ShoppingCart, FileText } from 'lucide-react';
+import { Plus, Minus, Tag } from 'lucide-react';
 
-export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
+export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShop, setSelectedShop] = useState('');
   const [material, setMaterial] = useState<Material>('CR');
@@ -29,6 +29,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [customCoating, setCustomCoating] = useState('');
   const [availableCoatings, setAvailableCoatings] = useState(DEFAULT_COATINGS);
   const [deltas, setDeltas] = useState<Record<string, { qty: number, name: string }>>({});
+  const [originalStock, setOriginalStock] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
 
   const lensRows = generateLensRows(powerType, compoundLimit);
@@ -36,7 +37,10 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function fetchShops() {
       if (isDemo) {
-        const demoShops = [{ id: '1', name: 'SS Opticals' }, { id: '2', name: 'Narbada Eye Care' }];
+        const demoShops = [
+          { id: '1', name: 'SS Opticals' },
+          { id: '2', name: 'Narbada Eye Care' }
+        ];
         setShops(demoShops);
         setSelectedShop(demoShops[0].id);
         return;
@@ -50,43 +54,144 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     fetchShops();
   }, [isDemo]);
 
+  useEffect(() => {
+    if (selectedShop && !isDemo) {
+      fetchStock();
+    }
+    setDeltas({});
+  }, [selectedShop, material, vision, coatings, sign, powerType, compoundLimit, selectedAxis, isDemo]);
+
+  async function fetchStock() {
+    setLoading(true);
+    let query = supabase
+      .from('lens_stock')
+      .select('*')
+      .eq('shop_id', selectedShop)
+      .eq('material', material)
+      .eq('vision', vision)
+      .eq('sign', sign)
+      .eq('power_type', powerType);
+
+    if (coatings.length > 0) {
+        query = query.contains('coatings', coatings);
+    }
+
+    if (powerType === 'SPH') {
+        query = query.eq('cyl', 0);
+    } else if (powerType === 'CYL') {
+        query = query.gt('cyl', 0).lte('cyl', 6.0);
+    } else {
+        if (compoundLimit === '2.0') {
+            query = query.gte('cyl', 0.25).lte('cyl', 2.0);
+        } else {
+            query = query.gte('cyl', 2.25).lte('cyl', 4.0);
+        }
+    }
+
+    if (selectedAxis !== undefined) {
+        query = query.eq('axis', selectedAxis);
+    } else {
+        query = query.is('axis', null);
+    }
+
+    const { data, error } = await query;
+    if (error) console.error("Fetch error:", error);
+
+    const stockMap: Record<string, number> = {};
+    if (data) {
+      data.forEach((item) => {
+        const key = `SPH:${item.sph.toFixed(2)}|CYL:${item.cyl.toFixed(2)}|AXIS:${item.axis || ''}`;
+        stockMap[key] = Number(item.quantity);
+      });
+    }
+    setOriginalStock({ ...stockMap });
+    setLoading(false);
+  }
+
   const handleQuantityChange = (sph: string, cyl: string, name: string, delta: number) => {
-    const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${sph}-${cyl}-${selectedAxis || ''}-${coatings.join(',')}`;
+    const key = `SPH:${parseFloat(sph).toFixed(2)}|CYL:${parseFloat(cyl).toFixed(2)}|AXIS:${selectedAxis || ''}`;
     const current = deltas[key] || { qty: 0, name };
     const newQty = Math.max(0, current.qty + delta);
+
     if (newQty === 0) {
-        const newDeltas = { ...deltas };
-        delete newDeltas[key];
-        setDeltas(newDeltas);
+      const newDeltas = { ...deltas };
+      delete newDeltas[key];
+      setDeltas(newDeltas);
     } else {
-        setDeltas({ ...deltas, [key]: { qty: newQty, name } });
+      setDeltas({ ...deltas, [key]: { qty: newQty, name } });
     }
   };
 
-  const saveOrder = async () => {
+  const saveSale = async () => {
     if (isDemo) {
-      alert('Demo Mode: Orders are not saved.');
+      alert('Demo Mode: Sales are not saved to the database.');
       return;
     }
     setLoading(true);
+
     const entries = Object.entries(deltas);
     if (entries.length === 0) {
-        alert('Please add items to order.');
-        setLoading(false);
-        return;
+      alert('Please add items to sell.');
+      setLoading(false);
+      return;
     }
 
-    for (const [_, data] of entries) {
-      const { error } = await supabase.from('orders').insert({
+    let successCount = 0;
+    for (const [key, data] of entries) {
+      const parts = key.split('|');
+      const sphStr = parts[0].split(':')[1];
+      const cylStr = parts[1].split(':')[1];
+      const axisStr = parts[2].split(':')[1];
+
+      const currentStock = originalStock[key] || 0;
+
+      if (currentStock < data.qty) {
+        console.warn(`Insufficient stock for ${data.name}. Current: ${currentStock}, Sale: ${data.qty}`);
+        // Optionally alert user or proceed with negative stock
+      }
+
+      // 1. Decrement stock
+      const { error: stockError } = await supabase.from('lens_stock').upsert({
+        shop_id: selectedShop,
+        material,
+        vision,
+        sign,
+        power_type: powerType,
+        sph: parseFloat(sphStr),
+        cyl: parseFloat(cylStr),
+        axis: axisStr ? parseInt(axisStr) : null,
+        coatings,
+        quantity: Math.max(0, currentStock - data.qty)
+      }, {
+        onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, coatings'
+      });
+
+      if (stockError) {
+        console.error("Stock update error:", stockError);
+        continue;
+      }
+
+      // 2. Record sale
+      const { error: saleError } = await supabase.from('sales').insert({
         shop_id: selectedShop,
         lens_details: { name: data.name },
         quantity: data.qty
       });
-      if (error) console.error(error);
+
+      if (saleError) {
+        console.error("Sale record error:", saleError);
+      } else {
+        successCount++;
+      }
     }
 
-    alert('Orders saved successfully!');
-    setDeltas({});
+    if (successCount > 0) {
+      alert('Sales recorded successfully!');
+      await fetchStock();
+      setDeltas({});
+    } else {
+      alert('Failed to record sales.');
+    }
     setLoading(false);
   };
 
@@ -106,127 +211,19 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     }
   };
 
-  const generateOrderReport = async () => {
-    setLoading(true);
-    const today = new Date().toISOString().split('T')[0];
-    const { data: orders } = await supabase
-        .from('orders')
-        .select('lens_details, quantity')
-        .eq('shop_id', selectedShop)
-        .gte('created_at', today);
-
-    if (!orders || orders.length === 0) {
-        alert('No orders found for today to generate report.');
-        setLoading(false);
-        return;
-    }
-
-    const summary: Record<string, number> = {};
-    orders.forEach(o => {
-        const name = o.lens_details.name;
-        summary[name] = (summary[name] || 0) + Number(o.quantity);
-    });
-
-    const items = Object.entries(summary).sort((a, b) => a[0].localeCompare(b[0]));
-    const dateStr = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
-    const shopName = shops.find(s => s.id === selectedShop)?.name || '';
-
-    const rows = [];
-    for (let i = 0; i < items.length; i += 2) {
-        rows.push([items[i], items[i+1]]);
-    }
-
-    const win = window.open('', '_blank');
-    if (win) {
-        win.document.write(`
-            <html>
-                <head>
-                    <title>Order - ${shopName}</title>
-                    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-                    <style>
-                        @page { size: A4; margin: 1cm; }
-                        body { font-family: 'Courier New', Courier, monospace; font-size: 12px; margin: 0; padding: 0; background: #f0f0f0; }
-                        .controls { background: #333; padding: 10px; display: flex; gap: 10px; justify-content: center; position: sticky; top: 0; z-index: 100; }
-                        .btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; }
-                        .btn:hover { background: #4338ca; }
-                        .page-container { background: white; width: 210mm; min-height: 297mm; margin: 20px auto; padding: 20mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); box-sizing: border-box; }
-                        .header { display: flex; justify-content: space-between; border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; }
-                        .shop-name { font-weight: bold; font-size: 16px; }
-                        table { width: 100%; border-collapse: collapse; }
-                        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-                        th { background: #f0f0f0; font-size: 10px; text-transform: uppercase; }
-                        .qty-col { width: 60px; text-align: center; font-weight: bold; }
-                        @media print { .controls { display: none; } .page-container { margin: 0; box-shadow: none; border: none; } body { background: white; } }
-                    </style>
-                </head>
-                <body>
-                    <div class="controls">
-                        <button class="btn" onclick="window.print()">Print / Save PDF</button>
-                        <button class="btn" onclick="downloadJPG()">Download JPG</button>
-                    </div>
-                    <div id="capture" class="page-container">
-                        <div class="header">
-                            <div class="shop-name">${shopName} - Order</div>
-                            <div>Date: ${dateStr}</div>
-                        </div>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Lens Power / Details</th>
-                                    <th class="qty-col">Qty</th>
-                                    <th>Lens Power / Details</th>
-                                    <th class="qty-col">Qty</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${rows.map(row => `
-                                    <tr>
-                                        <td>${row[0][0]}</td>
-                                        <td class="qty-col">${row[0][1]}</td>
-                                        <td>${row[1] ? row[1][0] : ''}</td>
-                                        <td class="qty-col">${row[1] ? row[1][1] : ''}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                    <script>
-                        function downloadJPG() {
-                            const btn = event.target;
-                            btn.disabled = true;
-                            btn.innerText = 'Generating...';
-                            html2canvas(document.querySelector("#capture"), { scale: 2 }).then(canvas => {
-                                const link = document.createElement('a');
-                                link.download = 'Order_${shopName.replace(/\s+/g, '_')}_${dateStr.replace(/\//g, '-')}.jpg';
-                                link.href = canvas.toDataURL('image/jpeg', 0.9);
-                                link.click();
-                                btn.disabled = false;
-                                btn.innerText = 'Download JPG';
-                            });
-                        }
-                    </script>
-                </body>
-            </html>
-        `);
-        win.document.close();
-    }
-    setLoading(false);
-  };
-
   const showAxis = (vision === 'KT' || vision === 'Prograssive') && (powerType !== 'SPH');
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Place Order</h1>
-        <div className="flex gap-2">
-            <button onClick={generateOrderReport} className="bg-blue-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-blue-700 shadow-sm transition-colors">
-                <FileText className="w-4 h-4 mr-1" /> Generate Order
-            </button>
-            <button onClick={saveOrder} disabled={loading} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-green-700 disabled:opacity-50 shadow-sm transition-colors">
-                <ShoppingCart className="w-4 h-4 mr-1" /> Save
-            </button>
-        </div>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Record Sale</h1>
+        <button
+          onClick={saveSale}
+          disabled={loading}
+          className="bg-indigo-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-indigo-700 disabled:opacity-50 text-sm shadow-sm transition-colors"
+        >
+          <Tag className="w-4 h-4 mr-1" /> Save Sale
+        </button>
       </div>
 
       <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm space-y-3 border border-gray-200 dark:border-gray-700">
@@ -261,7 +258,14 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Vision</label>
-            <select value={vision} onChange={(e) => { setVision(e.target.value as Vision); setSelectedAxis(undefined); }} className="block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]">
+            <select
+              value={vision}
+              onChange={(e) => {
+                  setVision(e.target.value as Vision);
+                  setSelectedAxis(undefined);
+              }}
+              className="block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]"
+            >
               {VISIONS.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
           </div>
@@ -314,9 +318,15 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             {showAxis && (
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Axis</label>
-                    <select value={selectedAxis || ''} onChange={(e) => setSelectedAxis(e.target.value ? parseInt(e.target.value) : undefined)} className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]">
+                    <select
+                        value={selectedAxis || ''}
+                        onChange={(e) => setSelectedAxis(e.target.value ? parseInt(e.target.value) : undefined)}
+                        className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]"
+                    >
                         <option value="">Select Axis</option>
-                        {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
+                        {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => (
+                            <option key={a} value={a}>{a}</option>
+                        ))}
                     </select>
                 </div>
             )}
@@ -361,28 +371,37 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             <thead className="bg-gray-50 dark:bg-gray-800/80 text-center">
               <tr>
                 <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Description</th>
-                <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Qty</th>
+                <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Stock</th>
+                <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Sell Qty</th>
                 <th className="px-2 py-1.5 text-right text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-20">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {lensRows.map((row) => {
                 const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, selectedAxis);
-                const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${row.sph}-${row.cyl}-${selectedAxis || ''}-${coatings.join(',')}`;
-                const qty = deltas[key]?.qty || 0;
+                const key = `SPH:${parseFloat(row.sph).toFixed(2)}|CYL:${parseFloat(row.cyl).toFixed(2)}|AXIS:${selectedAxis || ''}`;
+                const sellQty = deltas[key]?.qty || 0;
+                const origQty = originalStock[key] || 0;
 
                 return (
                   <tr key={`${row.sph}-${row.cyl}`} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>
-                    <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${qty > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}`}>
-                      {qty.toFixed(2)}
+                    <td className="px-1 py-1.5 whitespace-nowrap text-[10px] text-center text-gray-400 dark:text-gray-500">{origQty.toFixed(2)}</td>
+                    <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${sellQty === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-red-600 dark:text-red-400'}`}>
+                      {sellQty > 0 ? `-${sellQty.toFixed(2)}` : sellQty.toFixed(2)}
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
-                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5)} className="p-2 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
+                        <button
+                          onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5)}
+                          className="p-2 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        >
                           <Minus className="w-5 h-5" />
                         </button>
-                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5)} className="p-2 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
+                        <button
+                          onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5)}
+                          className="p-2 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                        >
                           <Plus className="w-5 h-5" />
                         </button>
                       </div>

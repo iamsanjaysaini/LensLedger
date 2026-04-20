@@ -335,7 +335,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
         <div className="overflow-x-auto">
-          <table className="divide-y divide-gray-200 dark:divide-gray-700">
+          <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800/80 text-center">
               <tr>
                 <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Description</th>
@@ -362,15 +362,15 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                       <div className="flex justify-end gap-1">
                         <button
                           onClick={() => handleQuantityChange(row.sph, row.cyl, selectedAxis, -0.5)}
-                          className="p-1 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                          className="p-2 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
                         >
-                          <Minus className="w-3 h-3" />
+                          <Minus className="w-5 h-5" />
                         </button>
                         <button
                           onClick={() => handleQuantityChange(row.sph, row.cyl, selectedAxis, 0.5)}
-                          className="p-1 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
+                          className="p-2 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
                         >
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-5 h-5" />
                         </button>
                       </div>
                     </td>

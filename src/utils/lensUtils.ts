@@ -35,25 +35,28 @@ export function generatePowerList(includeZero: boolean = true, max: number = 6.0
   return powers;
 }
 
-export function generateLensRows(powerType: PowerType, compoundLimit: string = '2.0') {
+export function generateLensRows(powerType: PowerType, compoundLimit: string = '2.0', vision: Vision = 'single vision') {
   const rows: { sph: string, cyl: string }[] = [];
+  const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
 
   if (powerType === 'SPH') {
-    const sphs = generatePowerList(true);
+    const sphs = generatePowerList(true, isKTOrProg ? 3.0 : 6.0);
     sphs.forEach(s => rows.push({ sph: s, cyl: '0.00' }));
   } else if (powerType === 'CYL') {
-    const cyls = generatePowerList(false);
+    const cyls = generatePowerList(false, 2.0);
     cyls.forEach(c => rows.push({ sph: '0.00', cyl: c }));
   } else if (powerType === 'Compound' || powerType === 'Cross Compound') {
     let cylStart = 0.25;
     let cylEnd = 2.0;
 
-    if (compoundLimit === '4.0') {
+    if (compoundLimit === '4.0' && !isKTOrProg) {
       cylStart = 2.25;
       cylEnd = 4.0;
     }
 
-    for (let s = 0.25; s <= 6.0; s += 0.25) {
+    const sphMax = isKTOrProg ? 3.0 : 6.0;
+
+    for (let s = 0.25; s <= sphMax; s += 0.25) {
       for (let c = cylStart; c <= cylEnd; c += 0.25) {
         rows.push({
           sph: s.toFixed(2),
@@ -74,9 +77,15 @@ export function formatLensName(
   sph: string,
   cyl: string,
   coatings: string[],
-  axis?: number
+  axis?: number,
+  add?: string
 ) {
+  const isSV = vision === 'single vision';
+  const isKT = vision === 'KT';
+  const isProg = vision === 'Prograssive';
+
   const materialPart = material === 'CR' ? '' : material;
+  const visionPart = isSV ? '' : vision;
   const coatingPart = coatings.join(' ');
 
   let powerPart = '';
@@ -96,13 +105,19 @@ export function formatLensName(
     powerPart = `${signPart}${sph}/${oppSign}${cyl}`;
   }
 
-  let axisPart = '';
-  if ((powerType === 'CYL' || powerType === 'Compound' || powerType === 'Cross Compound') && (vision === 'KT' || vision === 'Prograssive')) {
-    axisPart = axis ? ` AXIS ${axis}` : '';
+  let addPart = '';
+  if (add && (isKT || isProg)) {
+    addPart = `ADD +${parseFloat(add).toFixed(2)}`;
   }
 
-  return [powerPart, materialPart, axisPart, coatingPart]
-    .filter(part => part !== null && part !== undefined && part !== '')
+  let axisPart = '';
+  if ((powerType !== 'SPH') && (isKT || isProg)) {
+    axisPart = axis ? `AXIS ${axis}` : '';
+  }
+
+  // Formatting: <Power> <ADD> <Axis> <Coating> <Material> <Vision>
+  return [powerPart, addPart, axisPart, coatingPart, materialPart, visionPart]
+    .filter(part => part !== '')
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim();

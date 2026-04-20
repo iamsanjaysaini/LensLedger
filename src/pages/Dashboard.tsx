@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { ShoppingCart, Store, ChevronRight, FileText } from 'lucide-react';
-import { Shop } from '../utils/lensUtils';
+import { Shop, formatReportQty, sortLensNames } from '../utils/lensUtils';
 
 export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -63,7 +63,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
         summary[name] = (summary[name] || 0) + Number(o.quantity);
     });
 
-    const items = Object.entries(summary).sort((a, b) => a[0].localeCompare(b[0]));
+    const items = Object.entries(summary).sort((a, b) => sortLensNames(a[0], b[0]));
     const dateStr = new Date().toLocaleDateString('en-GB');
 
     const half = Math.ceil(items.length / 2);
@@ -108,7 +108,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>Lens Power / Details</th>
+                                            <th>Lens Power</th>
                                             <th class="qty-col">Qty</th>
                                         </tr>
                                     </thead>
@@ -116,7 +116,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                                         ${col1.map(item => `
                                             <tr>
                                                 <td>${item[0]}</td>
-                                                <td class="qty-col">${item[1]}</td>
+                                                <td class="qty-col">${formatReportQty(item[1])}</td>
                                             </tr>
                                         `).join('')}
                                     </tbody>
@@ -126,7 +126,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>Lens Power / Details</th>
+                                            <th>Lens Power</th>
                                             <th class="qty-col">Qty</th>
                                         </tr>
                                     </thead>
@@ -134,7 +134,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                                         ${col2.map(item => `
                                             <tr>
                                                 <td>${item[0]}</td>
-                                                <td class="qty-col">${item[1]}</td>
+                                                <td class="qty-col">${formatReportQty(item[1])}</td>
                                             </tr>
                                         `).join('')}
                                     </tbody>

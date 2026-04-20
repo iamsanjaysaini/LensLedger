@@ -26,13 +26,44 @@ export const MATERIALS: Material[] = ['CR', 'Poly', 'Glass'];
 export const VISIONS: Vision[] = ['single vision', 'KT', 'Prograssive'];
 export const DEFAULT_COATINGS = ['HC', 'HMC', 'Bluecut green', 'Bluecut Dual coat', 'Bluecut Blue', 'Photo Grey'];
 
-export function generatePowerList(includeZero: boolean = true) {
+export function generatePowerList(includeZero: boolean = true, max: number = 6.0) {
   const powers = [];
   const start = includeZero ? 0 : 0.25;
-  for (let i = start; i <= 10; i += 0.25) {
+  for (let i = start; i <= max; i += 0.25) {
     powers.push(i.toFixed(2));
   }
   return powers;
+}
+
+export function generateLensRows(powerType: PowerType, compoundLimit: string = '2.0') {
+  const rows: { sph: string, cyl: string }[] = [];
+
+  if (powerType === 'SPH') {
+    const sphs = generatePowerList(true);
+    sphs.forEach(s => rows.push({ sph: s, cyl: '0.00' }));
+  } else if (powerType === 'CYL') {
+    const cyls = generatePowerList(false);
+    cyls.forEach(c => rows.push({ sph: '0.00', cyl: c }));
+  } else if (powerType === 'Compound' || powerType === 'Cross Compound') {
+    let cylStart = 0.25;
+    let cylEnd = 2.0;
+
+    if (compoundLimit === '4.0') {
+      cylStart = 2.25;
+      cylEnd = 4.0;
+    }
+
+    for (let s = 0.25; s <= 6.0; s += 0.25) {
+      for (let c = cylStart; c <= cylEnd; c += 0.25) {
+        rows.push({
+          sph: s.toFixed(2),
+          cyl: c.toFixed(2)
+        });
+      }
+    }
+  }
+
+  return rows;
 }
 
 export function formatLensName(

@@ -67,7 +67,7 @@ function AppContent({ session, setSession, isConfigured, isMenuOpen, setIsMenuOp
         <nav className="bg-white dark:bg-gray-800 shadow-md border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-16">
-              <div className="flex">
+              <div className="flex items-center">
                 <div className="flex-shrink-0 flex items-center">
                   <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400">LensLedger</span>
                 </div>
@@ -102,13 +102,19 @@ function AppContent({ session, setSession, isConfigured, isMenuOpen, setIsMenuOp
                   </Link>
                 </div>
               </div>
-              <div className="hidden sm:flex items-center">
+              <div className="flex items-center space-x-2 sm:space-x-4">
+                <div className="flex flex-col items-end mr-1 sm:mr-2">
+                  <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 truncate max-w-[120px] sm:max-w-none">
+                    {session?.user?.email}
+                  </span>
+                </div>
                 <button
                   onClick={() => isConfigured ? supabase.auth.signOut() : setSession(null)}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+                  className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 border border-transparent text-[10px] sm:text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
                 >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
+                  <LogOut className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                  <span className="hidden xs:inline">Sign Out</span>
+                  <span className="xs:hidden">Out</span>
                 </button>
               </div>
             </div>
@@ -145,27 +151,6 @@ function AppContent({ session, setSession, isConfigured, isMenuOpen, setIsMenuOp
                 <Tag className="w-5 h-5 mb-1" />
                 Sell
               </Link>
-            </div>
-            <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-              <div className="flex items-center px-4">
-                <div className="flex-shrink-0">
-                  <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center">
-                    <span className="text-indigo-600 dark:text-indigo-300 font-bold">{session?.user?.email?.[0].toUpperCase()}</span>
-                  </div>
-                </div>
-                <div className="ml-3">
-                  <div className="text-base font-medium text-gray-800 dark:text-gray-200">{session?.user?.email}</div>
-                </div>
-              </div>
-              <div className="mt-3 space-y-1">
-                <button
-                  onClick={() => isConfigured ? supabase.auth.signOut() : setSession(null)}
-                  className="flex w-full items-center px-4 py-2 text-base font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <LogOut className="w-5 h-5 mr-3" />
-                  Sign Out
-                </button>
-              </div>
             </div>
           </div>
         </nav>

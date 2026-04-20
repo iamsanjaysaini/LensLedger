@@ -57,16 +57,18 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
 
     const summary: Record<string, number> = {};
     orders.forEach(o => {
-        const name = o.lens_details.name;
+        let name = o.lens_details.name;
+        // Remove material categories
+        name = name.replace(/\b(CR|Poly|Glass)\b/gi, '').trim().replace(/\s+/g, ' ');
         summary[name] = (summary[name] || 0) + Number(o.quantity);
     });
 
     const items = Object.entries(summary).sort((a, b) => a[0].localeCompare(b[0]));
     const dateStr = new Date().toLocaleDateString('en-GB');
-    const rows = [];
-    for (let i = 0; i < items.length; i += 2) {
-        rows.push([items[i], items[i+1]]);
-    }
+
+    const half = Math.ceil(items.length / 2);
+    const col1 = items.slice(0, half);
+    const col2 = items.slice(half);
 
     const win = window.open('', '_blank');
     if (win) {
@@ -76,19 +78,20 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                     <title>Combined Order - ${dateStr}</title>
                     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
                     <style>
-                        @page { size: A4; margin: 1cm; }
-                        body { font-family: 'Courier New', Courier, monospace; font-size: 12px; margin: 0; padding: 0; background: #f0f0f0; }
+                        @page { size: A4; margin: 0; }
+                        body { font-family: 'Courier New', Courier, monospace; font-size: 11px; margin: 0; padding: 0; background: #f0f0f0; }
                         .controls { background: #333; padding: 10px; display: flex; gap: 10px; justify-content: center; position: sticky; top: 0; z-index: 100; }
                         .btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; }
                         .btn:hover { background: #4338ca; }
-                        .page-container { background: white; width: 210mm; min-height: 297mm; margin: 20px auto; padding: 20mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); box-sizing: border-box; }
-                        .header { display: flex; justify-content: space-between; border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; }
-                        .shop-name { font-weight: bold; font-size: 16px; }
+                        .page-container { background: white; width: 210mm; min-height: 297mm; margin: 20px auto; padding: 15mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); box-sizing: border-box; }
+                        .header { border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; font-size: 16px; }
+                        .columns { display: flex; gap: 20px; }
+                        .column { flex: 1; }
                         table { width: 100%; border-collapse: collapse; }
-                        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-                        th { background: #f0f0f0; font-size: 10px; text-transform: uppercase; }
-                        .qty-col { width: 60px; text-align: center; font-weight: bold; }
-                        @media print { .controls { display: none; } .page-container { margin: 0; box-shadow: none; border: none; } body { background: white; } }
+                        th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+                        th { background: #f0f0f0; font-size: 9px; text-transform: uppercase; }
+                        .qty-col { width: 40px; text-align: center; font-weight: bold; }
+                        @media print { .controls { display: none; } .page-container { margin: 0; box-shadow: none; border: none; width: 100%; } body { background: white; } }
                     </style>
                 </head>
                 <body>
@@ -98,29 +101,46 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                     </div>
                     <div id="capture" class="page-container">
                         <div class="header">
-                            <div class="shop-name">SS Opticals & Narbada - Combined Order</div>
-                            <div>Date: ${dateStr}</div>
+                            DATE: ${dateStr}
                         </div>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Lens Power / Details</th>
-                                    <th class="qty-col">Qty</th>
-                                    <th>Lens Power / Details</th>
-                                    <th class="qty-col">Qty</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${rows.map(row => `
-                                    <tr>
-                                        <td>${row[0][0]}</td>
-                                        <td class="qty-col">${row[0][1]}</td>
-                                        <td>${row[1] ? row[1][0] : ''}</td>
-                                        <td class="qty-col">${row[1] ? row[1][1] : ''}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
+                        <div class="columns">
+                            <div class="column">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Lens Power / Details</th>
+                                            <th class="qty-col">Qty</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${col1.map(item => `
+                                            <tr>
+                                                <td>${item[0]}</td>
+                                                <td class="qty-col">${item[1]}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="column">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Lens Power / Details</th>
+                                            <th class="qty-col">Qty</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${col2.map(item => `
+                                            <tr>
+                                                <td>${item[0]}</td>
+                                                <td class="qty-col">${item[1]}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                     <script>
                         function downloadJPG() {

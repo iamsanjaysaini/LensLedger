@@ -93,7 +93,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         .eq('sign', sign)
         .eq('power_type', powerType);
 
-      query = query.eq('coatings', coatings);
+      query = query.eq('coatings', JSON.stringify(coatings));
 
       if (powerType === 'SPH') {
         query = query.eq('cyl', 0);

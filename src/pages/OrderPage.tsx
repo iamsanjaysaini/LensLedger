@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
@@ -20,7 +21,9 @@ import {
 } from '../utils/lensUtils';
 import { Plus, Minus, ShoppingCart, FileText } from 'lucide-react';
 
-export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
+export default function OrderPage({ isDemo: propIsDemo = false }: { isDemo?: boolean }) {
+  const outletContext = useOutletContext<{ isDemo: boolean }>() || {};
+  const isDemo = propIsDemo || outletContext.isDemo;
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShop, setSelectedShop] = useState('');
   const [material, setMaterial] = useState<Material>('CR');
@@ -36,7 +39,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [loading, setLoading] = useState(false);
 
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
-  const lensRows = generateLensRows(powerType, compoundLimit, vision);
+  const lensRows = useMemo(() => generateLensRows(powerType, compoundLimit, vision), [powerType, compoundLimit, vision]);
 
   useEffect(() => {
     const defaultAxis = getDefaultAxis(vision, sign, powerType);

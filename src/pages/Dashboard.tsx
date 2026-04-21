@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { ShoppingCart, Store, ChevronRight, FileText } from 'lucide-react';
 import { Shop, formatReportQty, sortLensNames } from '../utils/lensUtils';
 
-export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
+export default function Dashboard({ isDemo: propIsDemo = false }: { isDemo?: boolean }) {
+  const outletContext = useOutletContext<{ isDemo: boolean }>() || {};
+  const isDemo = propIsDemo || outletContext.isDemo;
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShop, setSelectedShop] = useState<string | null>(null);
   const [shopOrders, setShopOrders] = useState<any[]>([]);

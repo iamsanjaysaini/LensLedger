@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
@@ -35,7 +35,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [loading, setLoading] = useState(false);
 
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
-  const lensRows = generateLensRows(powerType, compoundLimit, vision);
+  const lensRows = useMemo(() => generateLensRows(powerType, compoundLimit, vision), [powerType, compoundLimit, vision]);
 
   useEffect(() => {
     const defaultAxis = getDefaultAxis(vision, sign, powerType);

@@ -36,7 +36,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
 
-  // ✅ Fix: useMemo se lensRows stable rahega
   const lensRows = useMemo(
     () => generateLensRows(powerType, compoundLimit, vision),
     [powerType, compoundLimit, vision]
@@ -114,7 +113,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       const stockMap: Record<string, number> = {};
       if (data) {
         data.forEach((item) => {
-          const key = `${item.sph.toFixed(2)}:${item.cyl.toFixed(2)}:${item.axis || ''}:${item.addition ? item.addition.toFixed(2) : ''}`;
+          // ✅ Fix: NULL ko empty string mein convert karo
+          const axisVal = item.axis !== null && item.axis !== undefined ? item.axis : '';
+          const addVal = item.addition !== null && item.addition !== undefined ? item.addition.toFixed(2) : '';
+          const key = `${item.sph.toFixed(2)}:${item.cyl.toFixed(2)}:${axisVal}:${addVal}`;
           stockMap[key] = Number(item.quantity);
         });
       }
@@ -232,13 +234,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Shop</label>
             <div className="flex gap-1.5">
               {shops.map(shop => (
-                <button
-                  key={shop.id}
-                  onClick={() => setSelectedShop(shop.id)}
-                  className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${selectedShop === shop.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-                >
-                  {shop.name}
-                </button>
+                <button key={shop.id} onClick={() => setSelectedShop(shop.id)} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${selectedShop === shop.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{shop.name}</button>
               ))}
             </div>
           </div>
@@ -246,23 +242,13 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Material</label>
             <div className="flex gap-1.5">
               {MATERIALS.map(m => (
-                <button
-                  key={m}
-                  onClick={() => setMaterial(m)}
-                  className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${material === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-                >
-                  {m}
-                </button>
+                <button key={m} onClick={() => setMaterial(m)} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${material === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{m}</button>
               ))}
             </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Vision</label>
-            <select
-              value={vision}
-              onChange={(e) => { setVision(e.target.value as Vision); setRowAxes({}); }}
-              className="block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]"
-            >
+            <select value={vision} onChange={(e) => { setVision(e.target.value as Vision); setRowAxes({}); }} className="block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]">
               {VISIONS.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
           </div>
@@ -273,13 +259,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Power Type</label>
             <div className="flex flex-wrap gap-1 mt-1">
               {['SPH', 'CYL', 'Compound', 'Cross Compound'].map((type) => (
-                <button
-                  key={type}
-                  onClick={() => setPowerType(type as PowerType)}
-                  className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}
-                >
-                  {type}
-                </button>
+                <button key={type} onClick={() => setPowerType(type as PowerType)} className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}>{type}</button>
               ))}
             </div>
           </div>

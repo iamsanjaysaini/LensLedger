@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
-  generatePowerList,
   getDefaultAxis,
   MATERIALS,
   VISIONS,
@@ -36,7 +35,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
 
-  // ✅ Fix: useMemo se lensRows stable rahega
   const lensRows = useMemo(
     () => generateLensRows(powerType, compoundLimit, vision),
     [powerType, compoundLimit, vision]
@@ -58,7 +56,10 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function fetchShops() {
       if (isDemo) {
-        const demoShops = [{ id: '1', name: 'SS Opticals' }, { id: '2', name: 'Narbada Eye Care' }];
+        const demoShops = [
+          { id: '1', name: 'SS Opticals' },
+          { id: '2', name: 'Narbada Eye Care' }
+        ];
         setShops(demoShops);
         setSelectedShop(demoShops[0].id);
         return;
@@ -82,18 +83,48 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   async function fetchStock() {
     setLoading(true);
     try {
-      let query = supabase.from('lens_stock').select('*').eq('shop_id', selectedShop).eq('material', material).eq('vision', vision).eq('sign', sign).eq('power_type', powerType);
+      let query = supabase
+        .from('lens_stock')
+        .select('*')
+        .eq('shop_id', selectedShop)
+        .eq('material', material)
+        .eq('vision', vision)
+        .eq('sign', sign)
+        .eq('power_type', powerType);
+
+      // ✅ Fix: JSON.stringify se coatings array sahi match hoga
       query = query.eq('coatings', JSON.stringify(coatings));
-      if (powerType === 'SPH') { query = query.eq('cyl', 0); }
-      else if (powerType === 'CYL') { query = query.gt('cyl', 0).lte('cyl', 6.0); }
-      else { if (compoundLimit === '2.0') { query = query.gte('cyl', 0.25).lte('cyl', 2.0); } else { query = query.gte('cyl', 2.25).lte('cyl', 4.0); } }
+
+      if (powerType === 'SPH') {
+        query = query.eq('cyl', 0);
+      } else if (powerType === 'CYL') {
+        query = query.gt('cyl', 0).lte('cyl', 6.0);
+      } else {
+        if (compoundLimit === '2.0') {
+          query = query.gte('cyl', 0.25).lte('cyl', 2.0);
+        } else {
+          query = query.gte('cyl', 2.25).lte('cyl', 4.0);
+        }
+      }
+
       const { data, error } = await query;
       if (error) throw error;
+
       const stockMap: Record<string, number> = {};
-      if (data) { data.forEach((item) => { const key = `${item.sph.toFixed(2)}:${item.cyl.toFixed(2)}:${item.axis || ''}:${item.addition ? item.addition.toFixed(2) : ''}`; stockMap[key] = Number(item.quantity); }); }
+      if (data) {
+        data.forEach((item) => {
+          const axisVal = item.axis !== null && item.axis !== undefined ? item.axis : '';
+          const addVal = item.addition !== null && item.addition !== undefined ? item.addition.toFixed(2) : '';
+          const key = `${item.sph.toFixed(2)}:${item.cyl.toFixed(2)}:${axisVal}:${addVal}`;
+          stockMap[key] = Number(item.quantity);
+        });
+      }
       setOriginalStock(stockMap);
-    } catch (error) { console.error("Fetch error:", error); }
-    finally { setLoading(false); }
+    } catch (error) {
+      console.error("Fetch error:", error);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const handleQuantityChange = (sph: string, cyl: string, name: string, delta: number, axis?: number, add?: string) => {
@@ -101,24 +132,42 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     const current = deltas[key] || { qty: 0, name };
     const newQty = Math.max(0, current.qty + delta);
     if (newQty === 0) { const newDeltas = { ...deltas }; delete newDeltas[key]; setDeltas(newDeltas); }
-    else { setDeltas({ ...deltas, [key]: { qty: newQty, name: name } }); }
+    else { setDeltas({ ...deltas, [key]: { qty: newQty, name } }); }
   };
 
   const saveSale = async () => {
     if (isDemo) { alert('Demo Mode: Sales are not saved to the database.'); return; }
     const entries = Object.entries(deltas);
     if (entries.length === 0) { alert('Please add items to sell.'); return; }
+
     setLoading(true);
     let successCount = 0;
     let lastError = null;
+
     for (const [key, data] of entries) {
       const [sphStr, cylStr, axisStr, addStr] = key.split(':');
       const currentStock = originalStock[key] || 0;
-      const { error: stockError } = await supabase.from('lens_stock').upsert({ shop_id: selectedShop, material, vision, sign, power_type: powerType, sph: parseFloat(sphStr), cyl: parseFloat(cylStr), axis: axisStr ? parseInt(axisStr) : null, addition: addStr ? parseFloat(addStr) : null, coatings, quantity: Math.max(0, currentStock - data.qty) }, { onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings' });
+
+      const { error: stockError } = await supabase.from('lens_stock').upsert({
+        shop_id: selectedShop, material, vision, sign, power_type: powerType,
+        sph: parseFloat(sphStr), cyl: parseFloat(cylStr),
+        axis: axisStr ? parseInt(axisStr) : null,
+        addition: addStr ? parseFloat(addStr) : null,
+        coatings, quantity: Math.max(0, currentStock - data.qty)
+      }, { onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings' });
+
       if (stockError) { console.error("Stock update error:", stockError); lastError = stockError; continue; }
-      const { error: saleError } = await supabase.from('sales').insert({ shop_id: selectedShop, lens_details: { name: data.name }, quantity: data.qty });
-      if (saleError) { console.error("Sale record error:", saleError); lastError = saleError; } else { successCount++; }
+
+      const { error: saleError } = await supabase.from('sales').insert({
+        shop_id: selectedShop,
+        lens_details: { name: data.name },
+        quantity: data.qty
+      });
+
+      if (saleError) { console.error("Sale record error:", saleError); lastError = saleError; }
+      else { successCount++; }
     }
+
     setLoading(false);
     if (successCount > 0) { alert(`Sales recorded successfully! (${successCount} items)`); await fetchStock(); setDeltas({}); }
     else if (lastError) { alert('Failed to record sales. Error: ' + (lastError as any).message); }
@@ -148,7 +197,9 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Record Sale</h1>
-        <button onClick={saveSale} disabled={loading} className="bg-indigo-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-indigo-700 disabled:opacity-50 text-sm shadow-sm transition-colors"><Tag className="w-4 h-4 mr-1" /> Save Sale</button>
+        <button onClick={saveSale} disabled={loading} className="bg-indigo-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-indigo-700 disabled:opacity-50 text-sm shadow-sm transition-colors">
+          <Tag className="w-4 h-4 mr-1" /> Save Sale
+        </button>
       </div>
 
       <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm space-y-3 border border-gray-200 dark:border-gray-700">
@@ -232,7 +283,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
                 const key = `${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}:${rowAxis || ''}:${row.add || ''}`;
                 const sellQty = deltas[key]?.qty || 0;
                 const origQty = originalStock[key] || 0;
-
                 return (
                   <tr key={rowKey} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>
@@ -245,7 +295,9 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
                       </td>
                     )}
                     <td className="px-1 py-1.5 whitespace-nowrap text-[10px] text-center text-gray-400 dark:text-gray-500">{origQty.toFixed(2)}</td>
-                    <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${sellQty === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-red-600 dark:text-red-400'}`}>{sellQty > 0 ? `-${sellQty.toFixed(2)}` : sellQty.toFixed(2)}</td>
+                    <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${sellQty === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-red-600 dark:text-red-400'}`}>
+                      {sellQty > 0 ? `-${sellQty.toFixed(2)}` : sellQty.toFixed(2)}
+                    </td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
                         <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5, rowAxis, row.add)} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Plus className="w-6 h-6" /></button>

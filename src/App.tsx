@@ -33,14 +33,6 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  if (!session) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-        <Auth />
-      </div>
-    );
-  }
-
   return <AppContent session={session} setSession={setSession} isConfigured={isConfigured} />;
 }
 
@@ -50,6 +42,14 @@ function AppContent({ session, setSession, isConfigured }: any) {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
+
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+        <Auth />
+      </div>
+    );
+  }
 
   return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
@@ -151,7 +151,7 @@ function AppContent({ session, setSession, isConfigured }: any) {
         </nav>
 
         <main className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-          <Routes key={location.pathname}>
+          <Routes>
             <Route path="/" element={<Dashboard isDemo={!isConfigured} />} />
             <Route path="/stock" element={<StockPage isDemo={!isConfigured} />} />
             <Route path="/order" element={<OrderPage isDemo={!isConfigured} />} />

@@ -6,12 +6,19 @@ import OrderPage from './pages/OrderPage';
 import SellPage from './pages/SellPage';
 import Auth from './components/Auth';
 import { LayoutDashboard, Package, ShoppingCart, LogOut, Tag } from 'lucide-react';
-import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, NavLink, Navigate, useLocation } from 'react-router-dom';
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
 function App() {
   const [session, setSession] = useState<any>(null);
   const [isConfigured, setIsConfigured] = useState(true);
-  const location = useLocation();
 
   useEffect(() => {
     if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_URL === 'https://placeholder-url.supabase.co') {
@@ -25,19 +32,12 @@ function App() {
       setSession(initialSession);
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       setSession(currentSession);
     });
 
     return () => subscription.unsubscribe();
   }, []);
-
-  // Scroll to top effect
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [location.pathname]);
 
   if (!session) {
     return (
@@ -47,7 +47,23 @@ function App() {
     );
   }
 
+  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
+      isActive
+        ? 'border-indigo-500 text-gray-900 dark:text-white'
+        : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'
+    }`;
+
+  const mobileNavLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${
+      isActive
+        ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300'
+        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+    }`;
+
   return (
+    <Router>
+      <ScrollToTop />
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
         {!isConfigured && (
           <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
@@ -63,34 +79,22 @@ function App() {
                   <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400">LensLedger</span>
                 </Link>
                 <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                  <Link
-                    to="/"
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === '/' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                  >
+                  <NavLink to="/" className={navLinkClass}>
                     <LayoutDashboard className="w-4 h-4 mr-2" />
                     Dashboard
-                  </Link>
-                  <Link
-                    to="/stock"
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === '/stock' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                  >
+                  </NavLink>
+                  <NavLink to="/stock" className={navLinkClass}>
                     <Package className="w-4 h-4 mr-2" />
                     Stock
-                  </Link>
-                  <Link
-                    to="/order"
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === '/order' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                  >
+                  </NavLink>
+                  <NavLink to="/order" className={navLinkClass}>
                     <ShoppingCart className="w-4 h-4 mr-2" />
                     Orders
-                  </Link>
-                  <Link
-                    to="/sell"
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === '/sell' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                  >
+                  </NavLink>
+                  <NavLink to="/sell" className={navLinkClass}>
                     <Tag className="w-4 h-4 mr-2" />
                     Sell
-                  </Link>
+                  </NavLink>
                 </div>
               </div>
               <div className="flex items-center space-x-2 sm:space-x-4">
@@ -114,41 +118,28 @@ function App() {
           {/* Mobile menu (Direct Buttons) */}
           <div className="sm:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-2">
             <div className="grid grid-cols-4 gap-2">
-              <Link
-                to="/"
-                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-              >
+              <NavLink to="/" className={mobileNavLinkClass}>
                 <LayoutDashboard className="w-5 h-5 mb-1" />
                 Dashboard
-              </Link>
-              <Link
-                to="/stock"
-                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/stock' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-              >
+              </NavLink>
+              <NavLink to="/stock" className={mobileNavLinkClass}>
                 <Package className="w-5 h-5 mb-1" />
                 Stock
-              </Link>
-              <Link
-                to="/order"
-                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/order' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-              >
+              </NavLink>
+              <NavLink to="/order" className={mobileNavLinkClass}>
                 <ShoppingCart className="w-5 h-5 mb-1" />
                 Orders
-              </Link>
-              <Link
-                to="/sell"
-                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/sell' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-              >
+              </NavLink>
+              <NavLink to="/sell" className={mobileNavLinkClass}>
                 <Tag className="w-5 h-5 mb-1" />
                 Sell
-              </Link>
+              </NavLink>
             </div>
           </div>
         </nav>
 
         <main className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-          {/* Use both key and location prop to ensure clean re-mounts on URL change */}
-          <Routes key={location.pathname} location={location}>
+          <Routes>
             <Route path="/" element={<Dashboard isDemo={!isConfigured} />} />
             <Route path="/stock" element={<StockPage isDemo={!isConfigured} />} />
             <Route path="/order" element={<OrderPage isDemo={!isConfigured} />} />
@@ -157,6 +148,7 @@ function App() {
           </Routes>
         </main>
       </div>
+    </Router>
   );
 }
 

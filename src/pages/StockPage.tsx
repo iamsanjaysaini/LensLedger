@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
-  generatePowerList,
   getDefaultAxis,
   MATERIALS,
   VISIONS,
@@ -33,8 +32,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [deltas, setDeltas] = useState<Record<string, number>>({});
   const [originalStock, setOriginalStock] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
-
-  const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
 
   const lensRows = useMemo(
     () => generateLensRows(powerType, compoundLimit, vision),
@@ -93,6 +90,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         .eq('sign', sign)
         .eq('power_type', powerType);
 
+      // ✅ Fix: JSON.stringify se coatings array sahi match hoga
       query = query.eq('coatings', JSON.stringify(coatings));
 
       if (powerType === 'SPH') {
@@ -113,7 +111,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       const stockMap: Record<string, number> = {};
       if (data) {
         data.forEach((item) => {
-          // ✅ Fix: NULL ko empty string mein convert karo
           const axisVal = item.axis !== null && item.axis !== undefined ? item.axis : '';
           const addVal = item.addition !== null && item.addition !== undefined ? item.addition.toFixed(2) : '';
           const key = `${item.sph.toFixed(2)}:${item.cyl.toFixed(2)}:${axisVal}:${addVal}`;
@@ -131,8 +128,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const handleQuantityChange = (sph: string, cyl: string, axis: number | undefined, add: string | undefined, delta: number) => {
     const key = `${parseFloat(sph).toFixed(2)}:${parseFloat(cyl).toFixed(2)}:${axis || ''}:${add || ''}`;
     const currentDelta = deltas[key] || 0;
-    const newDelta = currentDelta + delta;
-    setDeltas({ ...deltas, [key]: newDelta });
+    setDeltas({ ...deltas, [key]: currentDelta + delta });
   };
 
   const saveStock = async () => {
@@ -140,12 +136,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       alert('Demo Mode: Stock changes are not saved to the database.');
       return;
     }
-
     const entries = Object.entries(deltas).filter(([_, d]) => d !== 0);
-    if (entries.length === 0) {
-      alert('No changes to save.');
-      return;
-    }
+    if (entries.length === 0) { alert('No changes to save.'); return; }
 
     setLoading(true);
     let updatedCount = 0;
@@ -173,12 +165,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       const { error } = await supabase.from('lens_stock').upsert(update, {
         onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings'
       });
-      if (error) {
-        console.error("Save error:", error);
-        lastError = error;
-      } else {
-        updatedCount++;
-      }
+      if (error) { console.error("Save error:", error); lastError = error; }
+      else { updatedCount++; }
     }
 
     setLoading(false);
@@ -195,11 +183,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const toggleCoating = (c: string) => {
     if (c === 'Photo Grey') {
-      if (coatings.includes(c)) {
-        setCoatings(coatings.filter(item => item !== c));
-      } else {
-        setCoatings([...coatings, c]);
-      }
+      if (coatings.includes(c)) { setCoatings(coatings.filter(item => item !== c)); }
+      else { setCoatings([...coatings, c]); }
     } else {
       const photoGreySelected = coatings.includes('Photo Grey');
       setCoatings(photoGreySelected ? ['Photo Grey', c] : [c]);
@@ -219,11 +204,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Stock Management</h1>
-        <button
-          onClick={saveStock}
-          disabled={loading}
-          className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-green-700 disabled:opacity-50 text-sm shadow-sm transition-colors"
-        >
+        <button onClick={saveStock} disabled={loading} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-green-700 disabled:opacity-50 text-sm shadow-sm transition-colors">
           <Save className="w-4 h-4 mr-1" /> Save
         </button>
       </div>
@@ -317,7 +298,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 const key = `${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}:${rowAxis || ''}:${row.add || ''}`;
                 const delta = deltas[key] || 0;
                 const origQty = originalStock[key] || 0;
-
                 return (
                   <tr key={rowKey} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>

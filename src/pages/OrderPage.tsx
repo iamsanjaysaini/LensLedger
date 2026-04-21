@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
+  fetchCustomLensRows,
+  CustomLensRow,
   generatePowerList,
   getDefaultAxis,
   MATERIALS,
@@ -34,20 +36,32 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [availableCoatings, setAvailableCoatings] = useState(DEFAULT_COATINGS);
   const [deltas, setDeltas] = useState<Record<string, { qty: number, name: string }>>({});
   const [loading, setLoading] = useState(false);
+  const [customRows, setCustomRows] = useState<CustomLensRow[]>([]);
 
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
 
-  const lensRows = useMemo(
-    () => generateLensRows(powerType, compoundLimit, vision),
-    [powerType, compoundLimit, vision]
-  );
+  useEffect(() => {
+    async function loadRows() {
+      setLoading(true);
+      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit);
+      if (custom) {
+        setCustomRows(custom);
+      } else {
+        setCustomRows(generateLensRows(powerType, compoundLimit, vision));
+      }
+      setLoading(false);
+    }
+    loadRows();
+  }, [material, vision, sign, powerType, compoundLimit]);
+
+  const lensRows = customRows;
 
   useEffect(() => {
     const defaultAxis = getDefaultAxis(vision, sign, powerType);
     if (defaultAxis !== undefined) {
       const newAxes: Record<string, number> = {};
-      lensRows.forEach(row => {
-        newAxes[`${row.sph}-${row.cyl}-${row.add || ''}`] = defaultAxis;
+      lensRows.forEach((row, index) => {
+        newAxes[`${row.sph}-${row.cyl}-${row.add || ''}-${index}`] = defaultAxis;
       });
       setRowAxes(newAxes);
     } else {
@@ -315,8 +329,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {lensRows.map((row) => {
-                const rowKey = `${row.sph}-${row.cyl}-${row.add || ''}`;
+              {lensRows.map((row, index) => {
+                const rowKey = `${row.sph}-${row.cyl}-${row.add || ''}-${index}`;
                 const rowAxis = rowAxes[rowKey];
                 const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, rowAxis, row.add);
                 const stateKey = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${row.sph}-${row.cyl}-${rowAxis || ''}-${coatings.join(',')}-${isKTOrProg ? row.add : ''}`;

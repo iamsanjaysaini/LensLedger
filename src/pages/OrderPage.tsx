@@ -140,7 +140,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     setLoading(false);
     const win = window.open('', '_blank');
     if (win) {
-      // ✅ Fix: grey background aur strip hataya
       win.document.write(`
         <html>
           <head>
@@ -153,13 +152,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               .controls { padding: 8px 16px; display: flex; gap: 10px; justify-content: center; background: white; border-bottom: 1px solid #eee; }
               .btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; }
               .btn:hover { background: #4338ca; }
-              .page-container { background: white; width: 100%; padding: 10mm; }
+              .page-container { background: white; width: 794px; min-height: 1123px; padding: 10mm; margin: 0 auto; }
               .header { border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; font-size: 16px; }
               .columns { display: flex; gap: 10px; }
               .column { flex: 1; }
               table { width: 100%; border-collapse: collapse; }
-              th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
-              th { background: #f0f0f0; font-size: 9px; text-transform: uppercase; }
+              td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
               .qty-col { width: 40px; text-align: center; font-weight: bold; }
               @media print { .controls { display: none; } body { background: white; } }
             </style>
@@ -192,10 +190,28 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               function downloadJPG() {
                 const btn = document.querySelector('button[onclick="downloadJPG()"]');
                 if (btn) { btn.disabled = true; btn.innerText = 'Generating...'; }
-                html2canvas(document.querySelector("#capture"), { scale: 2 }).then(canvas => {
+
+                const a4Width = 794;
+                const a4Height = 1123;
+
+                html2canvas(document.querySelector("#capture"), {
+                  scale: 2,
+                  width: a4Width,
+                  height: a4Height,
+                  windowWidth: a4Width,
+                  windowHeight: a4Height
+                }).then(canvas => {
+                  const finalCanvas = document.createElement('canvas');
+                  finalCanvas.width = a4Width * 2;
+                  finalCanvas.height = a4Height * 2;
+                  const ctx = finalCanvas.getContext('2d');
+                  ctx.fillStyle = 'white';
+                  ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+                  ctx.drawImage(canvas, 0, 0);
+
                   const link = document.createElement('a');
                   link.download = 'Order_${dateStr.replace(/\//g, '-')}.jpg';
-                  link.href = canvas.toDataURL('image/jpeg', 0.9);
+                  link.href = finalCanvas.toDataURL('image/jpeg', 0.9);
                   link.click();
                   if (btn) { btn.disabled = false; btn.innerText = 'Download JPG'; }
                 });

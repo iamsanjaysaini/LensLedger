@@ -20,14 +20,14 @@ function App() {
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      setSession(initialSession);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      setSession(currentSession);
     });
 
     return () => subscription.unsubscribe();
@@ -46,6 +46,10 @@ function App() {
 
 function AppContent({ session, setSession, isConfigured }: any) {
   const location = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
   return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
@@ -147,7 +151,7 @@ function AppContent({ session, setSession, isConfigured }: any) {
         </nav>
 
         <main className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-          <Routes>
+          <Routes key={location.pathname}>
             <Route path="/" element={<Dashboard isDemo={!isConfigured} />} />
             <Route path="/stock" element={<StockPage isDemo={!isConfigured} />} />
             <Route path="/order" element={<OrderPage isDemo={!isConfigured} />} />

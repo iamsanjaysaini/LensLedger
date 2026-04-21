@@ -83,7 +83,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     setLoading(true);
     try {
       let query = supabase.from('lens_stock').select('*').eq('shop_id', selectedShop).eq('material', material).eq('vision', vision).eq('sign', sign).eq('power_type', powerType);
-      query = query.eq('coatings', coatings);
+      query = query.eq('coatings', JSON.stringify(coatings));
       if (powerType === 'SPH') { query = query.eq('cyl', 0); }
       else if (powerType === 'CYL') { query = query.gt('cyl', 0).lte('cyl', 6.0); }
       else { if (compoundLimit === '2.0') { query = query.gte('cyl', 0.25).lte('cyl', 2.0); } else { query = query.gte('cyl', 2.25).lte('cyl', 4.0); } }

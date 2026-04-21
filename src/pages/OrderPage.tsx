@@ -37,7 +37,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
 
-  // ✅ Fix: useMemo se lensRows stable rahega
   const lensRows = useMemo(
     () => generateLensRows(powerType, compoundLimit, vision),
     [powerType, compoundLimit, vision]
@@ -87,15 +86,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   };
 
   const saveOrder = async () => {
-    if (isDemo) {
-      alert('Demo Mode: Orders are not saved.');
-      return;
-    }
+    if (isDemo) { alert('Demo Mode: Orders are not saved.'); return; }
     const entries = Object.entries(deltas);
-    if (entries.length === 0) {
-      alert('Please add items to order.');
-      return;
-    }
+    if (entries.length === 0) { alert('Please add items to order.'); return; }
     setLoading(true);
     let successCount = 0;
     let lastError = null;
@@ -147,7 +140,72 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     setLoading(false);
     const win = window.open('', '_blank');
     if (win) {
-      win.document.write(`<html><head><title>Combined Order - ${dateStr}</title><script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script><style>@page{size:A4;margin:0}body{font-family:'Courier New',Courier,monospace;font-size:11px;margin:0;padding:0;background:#f0f0f0}.controls{background:#333;padding:10px;display:flex;gap:10px;justify-content:center;position:sticky;top:0;z-index:100}.btn{background:#4f46e5;color:white;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-family:sans-serif;font-size:14px}.btn:hover{background:#4338ca}.page-container{background:white;width:210mm;min-height:297mm;margin:20px auto;padding:10mm;box-shadow:0 0 10px rgba(0,0,0,0.1);box-sizing:border-box}.header{border-bottom:2px solid black;padding-bottom:10px;margin-bottom:20px;text-align:center;font-weight:bold;font-size:16px}.columns{display:flex;gap:10px}.column{flex:1}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}th{background:#f0f0f0;font-size:9px;text-transform:uppercase}.qty-col{width:40px;text-align:center;font-weight:bold}@media print{.controls{display:none}.page-container{margin:0;box-shadow:none;border:none;width:100%}body{background:white}}</style></head><body><div class="controls"><button class="btn" onclick="window.print()">Print / Save PDF</button><button class="btn" onclick="downloadJPG()">Download JPG</button></div><div id="capture" class="page-container"><div class="header">DATE: ${dateStr}</div><div class="columns"><div class="column"><table><thead><tr><th>Lens Power</th><th class="qty-col">Qty</th></tr></thead><tbody>${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}</tbody></table></div><div class="column"><table><thead><tr><th>Lens Power</th><th class="qty-col">Qty</th></tr></thead><tbody>${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}</tbody></table></div></div></div><script>function downloadJPG(){const btn=document.querySelector('button[onclick="downloadJPG()"]');if(btn){btn.disabled=true;btn.innerText='Generating...'}html2canvas(document.querySelector("#capture"),{scale:2}).then(canvas=>{const link=document.createElement('a');link.download='Combined_Order_${dateStr.replace(/\//g, '-')}.jpg';link.href=canvas.toDataURL('image/jpeg',0.9);link.click();if(btn){btn.disabled=false;btn.innerText='Download JPG'}})}</script></body></html>`);
+      // ✅ Fix: grey background aur strip hataya
+      win.document.write(`
+        <html>
+          <head>
+            <title>Order Report - ${dateStr}</title>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+            <style>
+              @page { size: A4; margin: 0; }
+              * { box-sizing: border-box; }
+              body { font-family: 'Courier New', Courier, monospace; font-size: 11px; margin: 0; padding: 0; background: white; }
+              .controls { padding: 8px 16px; display: flex; gap: 10px; justify-content: center; background: white; border-bottom: 1px solid #eee; }
+              .btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; }
+              .btn:hover { background: #4338ca; }
+              .page-container { background: white; width: 100%; padding: 10mm; }
+              .header { border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; font-size: 16px; }
+              .columns { display: flex; gap: 10px; }
+              .column { flex: 1; }
+              table { width: 100%; border-collapse: collapse; }
+              th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+              th { background: #f0f0f0; font-size: 9px; text-transform: uppercase; }
+              .qty-col { width: 40px; text-align: center; font-weight: bold; }
+              @media print { .controls { display: none; } body { background: white; } }
+            </style>
+          </head>
+          <body>
+            <div class="controls">
+              <button class="btn" onclick="window.print()">Print / Save PDF</button>
+              <button class="btn" onclick="downloadJPG()">Download JPG</button>
+            </div>
+            <div id="capture" class="page-container">
+              <div class="header">DATE: ${dateStr}</div>
+              <div class="columns">
+                <div class="column">
+                  <table>
+                    <thead><tr><th>Lens Power</th><th class="qty-col">Qty</th></tr></thead>
+                    <tbody>
+                      ${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
+                    </tbody>
+                  </table>
+                </div>
+                <div class="column">
+                  <table>
+                    <thead><tr><th>Lens Power</th><th class="qty-col">Qty</th></tr></thead>
+                    <tbody>
+                      ${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <script>
+              function downloadJPG() {
+                const btn = document.querySelector('button[onclick="downloadJPG()"]');
+                if (btn) { btn.disabled = true; btn.innerText = 'Generating...'; }
+                html2canvas(document.querySelector("#capture"), { scale: 2 }).then(canvas => {
+                  const link = document.createElement('a');
+                  link.download = 'Order_${dateStr.replace(/\//g, '-')}.jpg';
+                  link.href = canvas.toDataURL('image/jpeg', 0.9);
+                  link.click();
+                  if (btn) { btn.disabled = false; btn.innerText = 'Download JPG'; }
+                });
+              }
+            </script>
+          </body>
+        </html>
+      `);
       win.document.close();
     }
   };

@@ -6,7 +6,9 @@ import './index.css';
 
 // Ensure BrowserRouter wraps the entire App to provide routing context
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <BrowserRouter>
-    <App />
-  </BrowserRouter>
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>
 );

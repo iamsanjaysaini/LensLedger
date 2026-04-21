@@ -91,7 +91,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         .eq('power_type', powerType);
 
       // ✅ Fix: JSON.stringify se coatings array sahi match hoga
-      query = query.eq('coatings', JSON.stringify(coatings));
+      query = query.eq('coatings', `{${coatings.join(',')}}`);
 
       if (powerType === 'SPH') {
         query = query.eq('cyl', 0);

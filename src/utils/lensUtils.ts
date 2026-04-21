@@ -1,7 +1,15 @@
+import { supabase } from '../lib/supabase';
+
 export type Material = 'CR' | 'Poly' | 'Glass';
 export type Vision = 'single vision' | 'KT' | 'Prograssive';
 export type PowerType = 'SPH' | 'CYL' | 'Compound' | 'Cross Compound';
 export type Sign = '+' | '-';
+
+export interface CustomLensRow {
+  sph: string;
+  cyl: string;
+  add?: string;
+}
 
 export interface LensStock {
   id?: string;
@@ -35,8 +43,100 @@ export function generatePowerList(includeZero: boolean = true, max: number = 6.0
   return powers;
 }
 
+export async function fetchCustomLensRows(
+  material: Material,
+  vision: Vision,
+  sign: Sign | null,
+  powerType: PowerType,
+  compoundLimit: string = '2.0'
+): Promise<CustomLensRow[] | null> {
+  let query = supabase
+    .from('custom_lens_rows')
+    .select('sph, cyl, addition')
+    .eq('material', material)
+    .eq('vision', vision)
+    .eq('power_type', powerType)
+    .eq('compound_limit', compoundLimit);
+
+  if (sign === null) {
+    query = query.is('sign', null);
+  } else {
+    query = query.eq('sign', sign);
+  }
+
+  const { data, error } = await query.order('sort_order', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching custom lens rows:', error);
+    return null;
+  }
+
+  if (!data || data.length === 0) return null;
+
+  return data.map(row => ({
+    sph: row.sph.toFixed(2),
+    cyl: row.cyl.toFixed(2),
+    add: row.addition ? row.addition.toFixed(2) : undefined
+  }));
+}
+
+export async function saveCustomLensRows(
+  material: Material,
+  vision: Vision,
+  sign: Sign | null,
+  powerType: PowerType,
+  compoundLimit: string = '2.0',
+  rows: CustomLensRow[]
+) {
+  // First delete existing rows for this configuration
+  let deleteQuery = supabase
+    .from('custom_lens_rows')
+    .delete()
+    .eq('material', material)
+    .eq('vision', vision)
+    .eq('power_type', powerType)
+    .eq('compound_limit', compoundLimit);
+
+  if (sign === null) {
+    deleteQuery = deleteQuery.is('sign', null);
+  } else {
+    deleteQuery = deleteQuery.eq('sign', sign);
+  }
+
+  const { error: deleteError } = await deleteQuery;
+
+  if (deleteError) {
+    console.error('Error deleting old custom lens rows:', deleteError);
+    return { error: deleteError };
+  }
+
+  // Insert new rows
+  const inserts = rows.map((row, index) => ({
+    material,
+    vision,
+    sign,
+    power_type: powerType,
+    compound_limit: compoundLimit,
+    sph: parseFloat(row.sph),
+    cyl: parseFloat(row.cyl),
+    addition: row.add ? parseFloat(row.add) : null,
+    sort_order: index
+  }));
+
+  const { error: insertError } = await supabase
+    .from('custom_lens_rows')
+    .insert(inserts);
+
+  if (insertError) {
+    console.error('Error inserting custom lens rows:', insertError);
+    return { error: insertError };
+  }
+
+  return { success: true };
+}
+
 export function generateLensRows(powerType: PowerType, compoundLimit: string = '2.0', vision: Vision = 'single vision') {
-  const rows: { sph: string, cyl: string, add?: string }[] = [];
+  const rows: CustomLensRow[] = [];
   const isKT = vision === 'KT';
   const isProg = vision === 'Prograssive';
   const isKTOrProg = isKT || isProg;

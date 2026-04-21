@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
@@ -35,7 +35,12 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   const [loading, setLoading] = useState(false);
 
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
-  const lensRows = generateLensRows(powerType, compoundLimit, vision);
+
+  // ✅ Fix: useMemo se lensRows stable rahega
+  const lensRows = useMemo(
+    () => generateLensRows(powerType, compoundLimit, vision),
+    [powerType, compoundLimit, vision]
+  );
 
   useEffect(() => {
     const defaultAxis = getDefaultAxis(vision, sign, powerType);
@@ -53,10 +58,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function fetchShops() {
       if (isDemo) {
-        const demoShops = [
-          { id: '1', name: 'SS Opticals' },
-          { id: '2', name: 'Narbada Eye Care' }
-        ];
+        const demoShops = [{ id: '1', name: 'SS Opticals' }, { id: '2', name: 'Narbada Eye Care' }];
         setShops(demoShops);
         setSelectedShop(demoShops[0].id);
         return;
@@ -80,140 +82,54 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   async function fetchStock() {
     setLoading(true);
     try {
-      let query = supabase
-        .from('lens_stock')
-        .select('*')
-        .eq('shop_id', selectedShop)
-        .eq('material', material)
-        .eq('vision', vision)
-        .eq('sign', sign)
-        .eq('power_type', powerType);
-
-    query = query.eq('coatings', coatings);
-
-      if (powerType === 'SPH') {
-          query = query.eq('cyl', 0);
-      } else if (powerType === 'CYL') {
-          query = query.gt('cyl', 0).lte('cyl', 6.0);
-      } else {
-          if (compoundLimit === '2.0') {
-              query = query.gte('cyl', 0.25).lte('cyl', 2.0);
-          } else {
-              query = query.gte('cyl', 2.25).lte('cyl', 4.0);
-          }
-      }
-
+      let query = supabase.from('lens_stock').select('*').eq('shop_id', selectedShop).eq('material', material).eq('vision', vision).eq('sign', sign).eq('power_type', powerType);
+      query = query.eq('coatings', coatings);
+      if (powerType === 'SPH') { query = query.eq('cyl', 0); }
+      else if (powerType === 'CYL') { query = query.gt('cyl', 0).lte('cyl', 6.0); }
+      else { if (compoundLimit === '2.0') { query = query.gte('cyl', 0.25).lte('cyl', 2.0); } else { query = query.gte('cyl', 2.25).lte('cyl', 4.0); } }
       const { data, error } = await query;
       if (error) throw error;
-
       const stockMap: Record<string, number> = {};
-      if (data) {
-        data.forEach((item) => {
-          const key = `${item.sph.toFixed(2)}:${item.cyl.toFixed(2)}:${item.axis || ''}:${item.addition ? item.addition.toFixed(2) : ''}`;
-          stockMap[key] = Number(item.quantity);
-        });
-      }
+      if (data) { data.forEach((item) => { const key = `${item.sph.toFixed(2)}:${item.cyl.toFixed(2)}:${item.axis || ''}:${item.addition ? item.addition.toFixed(2) : ''}`; stockMap[key] = Number(item.quantity); }); }
       setOriginalStock(stockMap);
-    } catch (error) {
-      console.error("Fetch error:", error);
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { console.error("Fetch error:", error); }
+    finally { setLoading(false); }
   }
 
   const handleQuantityChange = (sph: string, cyl: string, name: string, delta: number, axis?: number, add?: string) => {
     const key = `${parseFloat(sph).toFixed(2)}:${parseFloat(cyl).toFixed(2)}:${axis || ''}:${add || ''}`;
     const current = deltas[key] || { qty: 0, name };
     const newQty = Math.max(0, current.qty + delta);
-
-    if (newQty === 0) {
-      const newDeltas = { ...deltas };
-      delete newDeltas[key];
-      setDeltas(newDeltas);
-    } else {
-      setDeltas({ ...deltas, [key]: { qty: newQty, name: name } });
-    }
+    if (newQty === 0) { const newDeltas = { ...deltas }; delete newDeltas[key]; setDeltas(newDeltas); }
+    else { setDeltas({ ...deltas, [key]: { qty: newQty, name: name } }); }
   };
 
   const saveSale = async () => {
-    if (isDemo) {
-      alert('Demo Mode: Sales are not saved to the database.');
-      return;
-    }
-
+    if (isDemo) { alert('Demo Mode: Sales are not saved to the database.'); return; }
     const entries = Object.entries(deltas);
-    if (entries.length === 0) {
-      alert('Please add items to sell.');
-      return;
-    }
-
+    if (entries.length === 0) { alert('Please add items to sell.'); return; }
     setLoading(true);
     let successCount = 0;
     let lastError = null;
-
     for (const [key, data] of entries) {
       const [sphStr, cylStr, axisStr, addStr] = key.split(':');
       const currentStock = originalStock[key] || 0;
-
-      // 1. Decrement stock
-      const { error: stockError } = await supabase.from('lens_stock').upsert({
-        shop_id: selectedShop,
-        material,
-        vision,
-        sign,
-        power_type: powerType,
-        sph: parseFloat(sphStr),
-        cyl: parseFloat(cylStr),
-        axis: axisStr ? parseInt(axisStr) : null,
-        addition: addStr ? parseFloat(addStr) : null,
-        coatings,
-        quantity: Math.max(0, currentStock - data.qty)
-      }, {
-        onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings'
-      });
-
-      if (stockError) {
-        console.error("Stock update error:", stockError);
-        lastError = stockError;
-        continue;
-      }
-
-      // 2. Record sale
-      const { error: saleError } = await supabase.from('sales').insert({
-        shop_id: selectedShop,
-        lens_details: { name: data.name },
-        quantity: data.qty
-      });
-
-      if (saleError) {
-        console.error("Sale record error:", saleError);
-        lastError = saleError;
-      } else {
-        successCount++;
-      }
+      const { error: stockError } = await supabase.from('lens_stock').upsert({ shop_id: selectedShop, material, vision, sign, power_type: powerType, sph: parseFloat(sphStr), cyl: parseFloat(cylStr), axis: axisStr ? parseInt(axisStr) : null, addition: addStr ? parseFloat(addStr) : null, coatings, quantity: Math.max(0, currentStock - data.qty) }, { onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings' });
+      if (stockError) { console.error("Stock update error:", stockError); lastError = stockError; continue; }
+      const { error: saleError } = await supabase.from('sales').insert({ shop_id: selectedShop, lens_details: { name: data.name }, quantity: data.qty });
+      if (saleError) { console.error("Sale record error:", saleError); lastError = saleError; } else { successCount++; }
     }
-
     setLoading(false);
-    if (successCount > 0) {
-      alert(`Sales recorded successfully! (${successCount} items)`);
-      await fetchStock();
-      setDeltas({});
-    } else if (lastError) {
-      alert('Failed to record sales. Error: ' + (lastError as any).message);
-    } else {
-      alert('No sales were recorded.');
-    }
+    if (successCount > 0) { alert(`Sales recorded successfully! (${successCount} items)`); await fetchStock(); setDeltas({}); }
+    else if (lastError) { alert('Failed to record sales. Error: ' + (lastError as any).message); }
+    else { alert('No sales were recorded.'); }
   };
 
   const toggleCoating = (c: string) => {
     if (c === 'Photo Grey') {
-      if (coatings.includes(c)) {
-        setCoatings(coatings.filter(item => item !== c));
-      } else {
-        setCoatings([...coatings, c]);
-      }
+      if (coatings.includes(c)) { setCoatings(coatings.filter(item => item !== c)); }
+      else { setCoatings([...coatings, c]); }
     } else {
-      // Non-Photo Grey coatings are mutually exclusive and one is compulsory
       const photoGreySelected = coatings.includes('Photo Grey');
       setCoatings(photoGreySelected ? ['Photo Grey', c] : [c]);
     }
@@ -228,19 +144,11 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     }
   };
 
-  const showAxis = (vision === 'KT' || vision === 'Prograssive') && (powerType !== 'SPH');
-
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Record Sale</h1>
-        <button
-          onClick={saveSale}
-          disabled={loading}
-          className="bg-indigo-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-indigo-700 disabled:opacity-50 text-sm shadow-sm transition-colors"
-        >
-          <Tag className="w-4 h-4 mr-1" /> Save Sale
-        </button>
+        <button onClick={saveSale} disabled={loading} className="bg-indigo-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-indigo-700 disabled:opacity-50 text-sm shadow-sm transition-colors"><Tag className="w-4 h-4 mr-1" /> Save Sale</button>
       </div>
 
       <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm space-y-3 border border-gray-200 dark:border-gray-700">
@@ -248,119 +156,57 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Shop</label>
             <div className="flex gap-1.5">
-              {shops.map(shop => (
-                <button
-                  key={shop.id}
-                  onClick={() => setSelectedShop(shop.id)}
-                  className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${selectedShop === shop.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-                >
-                  {shop.name}
-                </button>
-              ))}
+              {shops.map(shop => (<button key={shop.id} onClick={() => setSelectedShop(shop.id)} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${selectedShop === shop.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{shop.name}</button>))}
             </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Material</label>
             <div className="flex gap-1.5">
-              {MATERIALS.map(m => (
-                <button
-                  key={m}
-                  onClick={() => setMaterial(m)}
-                  className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${material === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-                >
-                  {m}
-                </button>
-              ))}
+              {MATERIALS.map(m => (<button key={m} onClick={() => setMaterial(m)} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${material === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{m}</button>))}
             </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Vision</label>
-            <select
-              value={vision}
-              onChange={(e) => {
-                  setVision(e.target.value as Vision);
-                  setRowAxes({});
-              }}
-              className="block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]"
-            >
+            <select value={vision} onChange={(e) => { setVision(e.target.value as Vision); setRowAxes({}); }} className="block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]">
               {VISIONS.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <div className="md:col-span-1">
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Power Type</label>
-                <div className="flex flex-wrap gap-1 mt-1">
-                    {['SPH', 'CYL', 'Compound', 'Cross Compound'].map((type) => (
-                        <button
-                            key={type}
-                            onClick={() => {
-                                setPowerType(type as PowerType);
-                            }}
-                            className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}
-                        >
-                            {type}
-                        </button>
-                    ))}
-                </div>
+          <div className="md:col-span-1">
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Power Type</label>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {['SPH', 'CYL', 'Compound', 'Cross Compound'].map((type) => (<button key={type} onClick={() => setPowerType(type as PowerType)} className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}>{type}</button>))}
             </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sign</label>
+            <div className="flex gap-1.5 mt-1">
+              <button onClick={() => setSign('+')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '+' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>+</button>
+              <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
+            </div>
+          </div>
+          {(powerType === 'Compound' || powerType === 'Cross Compound') && (
             <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sign</label>
-                <div className="flex gap-1.5 mt-1">
-                    <button onClick={() => setSign('+')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '+' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>+</button>
-                    <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
-                </div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Range</label>
+              <div className="flex gap-1.5 mt-1">
+                <button onClick={() => setCompoundLimit('2.0')} className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '2.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>upto 2.0 cyl</button>
+                <button onClick={() => setCompoundLimit('4.0')} className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '4.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>upto 4 cyl</button>
+              </div>
             </div>
-            {(powerType === 'Compound' || powerType === 'Cross Compound') && (
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Range</label>
-                    <div className="flex gap-1.5 mt-1">
-                        <button
-                            onClick={() => setCompoundLimit('2.0')}
-                            className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '2.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}
-                        >
-                            upto 2.0 cyl
-                        </button>
-                        <button
-                            onClick={() => setCompoundLimit('4.0')}
-                            className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '4.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}
-                        >
-                            upto 4 cyl
-                        </button>
-                    </div>
-                </div>
-            )}
+          )}
         </div>
 
         <div>
           <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Coatings</label>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1.5">
-              {availableCoatings.map(c => (
-                <button
-                  key={c}
-                  onClick={() => toggleCoating(c)}
-                  className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`}
-                >
-                  {c}
-                </button>
-              ))}
+              {availableCoatings.map(c => (<button key={c} onClick={() => toggleCoating(c)} className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`}>{c}</button>))}
             </div>
             <div className="flex items-center gap-1.5 ml-auto">
-              <input
-                type="text"
-                value={customCoating}
-                onChange={(e) => setCustomCoating(e.target.value)}
-                placeholder="Add coating..."
-                className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
-              />
-              <button
-                onClick={addCustomCoating}
-                className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 p-1 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
+              <input type="text" value={customCoating} onChange={(e) => setCustomCoating(e.target.value)} placeholder="Add coating..." className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all" />
+              <button onClick={addCustomCoating} className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 p-1 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
             </div>
           </div>
         </div>
@@ -391,29 +237,18 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
                   <tr key={rowKey} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>
                     {powerType !== 'SPH' && (
-                        <td className="px-1 py-1.5 text-center">
-                            <select
-                                value={rowAxis || ''}
-                                onChange={(e) => setRowAxes({ ...rowAxes, [rowKey]: parseInt(e.target.value) })}
-                                className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14"
-                            >
-                                <option value="">-</option>
-                                {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
-                            </select>
-                        </td>
+                      <td className="px-1 py-1.5 text-center">
+                        <select value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [rowKey]: parseInt(e.target.value) })} className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14">
+                          <option value="">-</option>
+                          {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                      </td>
                     )}
                     <td className="px-1 py-1.5 whitespace-nowrap text-[10px] text-center text-gray-400 dark:text-gray-500">{origQty.toFixed(2)}</td>
-                    <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${sellQty === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-red-600 dark:text-red-400'}`}>
-                      {sellQty > 0 ? `-${sellQty.toFixed(2)}` : sellQty.toFixed(2)}
-                    </td>
+                    <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${sellQty === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-red-600 dark:text-red-400'}`}>{sellQty > 0 ? `-${sellQty.toFixed(2)}` : sellQty.toFixed(2)}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
-                        <button
-                          onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5, rowAxis, row.add)}
-                          className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
-                        >
-                          <Plus className="w-6 h-6" />
-                        </button>
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5, rowAxis, row.add)} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Plus className="w-6 h-6" /></button>
                       </div>
                     </td>
                   </tr>

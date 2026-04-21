@@ -6,7 +6,7 @@ import OrderPage from './pages/OrderPage';
 import SellPage from './pages/SellPage';
 import Auth from './components/Auth';
 import { LayoutDashboard, Package, ShoppingCart, LogOut, Tag } from 'lucide-react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -41,11 +41,7 @@ function App() {
     );
   }
 
-  return (
-    <Router>
-      <AppContent session={session} setSession={setSession} isConfigured={isConfigured} />
-    </Router>
-  );
+  return <AppContent session={session} setSession={setSession} isConfigured={isConfigured} />;
 }
 
 function AppContent({ session, setSession, isConfigured }: any) {

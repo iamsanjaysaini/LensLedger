@@ -174,7 +174,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               <div class="columns">
                 <div class="column">
                   <table>
-                    <thead><tr><th>Lens Power</th><th class="qty-col">Qty</th></tr></thead>
                     <tbody>
                       ${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
                     </tbody>
@@ -182,7 +181,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                 </div>
                 <div class="column">
                   <table>
-                    <thead><tr><th>Lens Power</th><th class="qty-col">Qty</th></tr></thead>
                     <tbody>
                       ${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
                     </tbody>

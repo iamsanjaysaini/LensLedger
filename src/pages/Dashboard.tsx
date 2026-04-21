@@ -105,12 +105,6 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                         <div class="columns">
                             <div class="column">
                                 <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Lens Power</th>
-                                            <th class="qty-col">Qty</th>
-                                        </tr>
-                                    </thead>
                                     <tbody>
                                         ${col1.map(item => `
                                             <tr>
@@ -123,12 +117,6 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                             </div>
                             <div class="column">
                                 <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Lens Power</th>
-                                            <th class="qty-col">Qty</th>
-                                        </tr>
-                                    </thead>
                                     <tbody>
                                         ${col2.map(item => `
                                             <tr>

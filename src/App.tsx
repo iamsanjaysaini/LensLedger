@@ -1,3 +1,4 @@
+// App.tsx
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import Dashboard from './pages/Dashboard';
@@ -34,7 +35,6 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Scroll to top effect
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
@@ -48,115 +48,115 @@ function App() {
   }
 
   return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
-        {!isConfigured && (
-          <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
-            <p className="font-bold">Demo Mode</p>
-            <p>Supabase is not configured. Data will not persist and shop data is mocked.</p>
-          </div>
-        )}
-        <nav className="bg-white dark:bg-gray-800 shadow-md border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between h-16">
-              <div className="flex items-center">
-                <Link to="/" className="flex-shrink-0 flex items-center">
-                  <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400">LensLedger</span>
-                </Link>
-                <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                  <Link
-                    to="/"
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === '/' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                  >
-                    <LayoutDashboard className="w-4 h-4 mr-2" />
-                    Dashboard
-                  </Link>
-                  <Link
-                    to="/stock"
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === '/stock' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                  >
-                    <Package className="w-4 h-4 mr-2" />
-                    Stock
-                  </Link>
-                  <Link
-                    to="/order"
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === '/order' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                  >
-                    <ShoppingCart className="w-4 h-4 mr-2" />
-                    Orders
-                  </Link>
-                  <Link
-                    to="/sell"
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === '/sell' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                  >
-                    <Tag className="w-4 h-4 mr-2" />
-                    Sell
-                  </Link>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2 sm:space-x-4">
-                <div className="flex flex-col items-end mr-1 sm:mr-2">
-                  <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 truncate max-w-[120px] sm:max-w-none">
-                    {session?.user?.email}
-                  </span>
-                </div>
-                <button
-                  onClick={() => isConfigured ? supabase.auth.signOut() : setSession(null)}
-                  className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 border border-transparent text-[10px] sm:text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+      {!isConfigured && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
+          <p className="font-bold">Demo Mode</p>
+          <p>Supabase is not configured. Data will not persist and shop data is mocked.</p>
+        </div>
+      )}
+      <nav className="bg-white dark:bg-gray-800 shadow-md border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <Link to="/" className="flex-shrink-0 flex items-center">
+                <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400">LensLedger</span>
+              </Link>
+              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+                <Link
+                  to="/"
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === '/' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'}`}
                 >
-                  <LogOut className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                  <span className="hidden xs:inline">Sign Out</span>
-                  <span className="xs:hidden">Out</span>
-                </button>
+                  <LayoutDashboard className="w-4 h-4 mr-2" />
+                  Dashboard
+                </Link>
+                <Link
+                  to="/stock"
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === '/stock' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                >
+                  <Package className="w-4 h-4 mr-2" />
+                  Stock
+                </Link>
+                <Link
+                  to="/order"
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === '/order' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                >
+                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  Orders
+                </Link>
+                <Link
+                  to="/sell"
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === '/sell' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                >
+                  <Tag className="w-4 h-4 mr-2" />
+                  Sell
+                </Link>
               </div>
             </div>
-          </div>
-
-          {/* Mobile menu (Direct Buttons) */}
-          <div className="sm:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-2">
-            <div className="grid grid-cols-4 gap-2">
-              <Link
-                to="/"
-                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <div className="flex flex-col items-end mr-1 sm:mr-2">
+                <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 truncate max-w-[120px] sm:max-w-none">
+                  {session?.user?.email}
+                </span>
+              </div>
+              <button
+                onClick={() => isConfigured ? supabase.auth.signOut() : setSession(null)}
+                className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 border border-transparent text-[10px] sm:text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
               >
-                <LayoutDashboard className="w-5 h-5 mb-1" />
-                Dashboard
-              </Link>
-              <Link
-                to="/stock"
-                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/stock' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-              >
-                <Package className="w-5 h-5 mb-1" />
-                Stock
-              </Link>
-              <Link
-                to="/order"
-                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/order' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-              >
-                <ShoppingCart className="w-5 h-5 mb-1" />
-                Orders
-              </Link>
-              <Link
-                to="/sell"
-                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/sell' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-              >
-                <Tag className="w-5 h-5 mb-1" />
-                Sell
-              </Link>
+                <LogOut className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                <span className="hidden xs:inline">Sign Out</span>
+                <span className="xs:hidden">Out</span>
+              </button>
             </div>
           </div>
-        </nav>
+        </div>
 
-        <main className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-          {/* Use both key and location prop to ensure clean re-mounts on URL change */}
-          <Routes key={location.pathname} location={location}>
-            <Route path="/" element={<Dashboard isDemo={!isConfigured} />} />
-            <Route path="/stock" element={<StockPage isDemo={!isConfigured} />} />
-            <Route path="/order" element={<OrderPage isDemo={!isConfigured} />} />
-            <Route path="/sell" element={<SellPage isDemo={!isConfigured} />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </main>
-      </div>
+        {/* Mobile menu */}
+        <div className="sm:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-2">
+          <div className="grid grid-cols-4 gap-2">
+            <Link
+              to="/"
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+            >
+              <LayoutDashboard className="w-5 h-5 mb-1" />
+              Dashboard
+            </Link>
+            <Link
+              to="/stock"
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/stock' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+            >
+              <Package className="w-5 h-5 mb-1" />
+              Stock
+            </Link>
+            <Link
+              to="/order"
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/order' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+            >
+              <ShoppingCart className="w-5 h-5 mb-1" />
+              Orders
+            </Link>
+            <Link
+              to="/sell"
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/sell' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+            >
+              <Tag className="w-5 h-5 mb-1" />
+              Sell
+            </Link>
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+        {/* ✅ FIX: key aur location props hataye gaye */}
+        <Routes>
+          <Route path="/" element={<Dashboard isDemo={!isConfigured} />} />
+          <Route path="/stock" element={<StockPage isDemo={!isConfigured} />} />
+          <Route path="/order" element={<OrderPage isDemo={!isConfigured} />} />
+          <Route path="/sell" element={<SellPage isDemo={!isConfigured} />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
+    </div>
   );
 }
 

@@ -151,7 +151,6 @@ function AppContent({ session, setSession, isConfigured }: any) {
         </nav>
 
         <main className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-          {/* Force re-mount on navigation to ensure content updates */}
           <Routes key={location.pathname}>
             <Route path="/" element={<Dashboard isDemo={!isConfigured} />} />
             <Route path="/stock" element={<StockPage isDemo={!isConfigured} />} />

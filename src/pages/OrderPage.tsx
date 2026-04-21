@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
@@ -36,7 +36,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [loading, setLoading] = useState(false);
 
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
-  const lensRows = generateLensRows(powerType, compoundLimit, vision);
+
+  // ✅ Fix: useMemo se lensRows stable rahega
+  const lensRows = useMemo(
+    () => generateLensRows(powerType, compoundLimit, vision),
+    [powerType, compoundLimit, vision]
+  );
 
   useEffect(() => {
     const defaultAxis = getDefaultAxis(vision, sign, powerType);
@@ -73,11 +78,11 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     const current = deltas[key] || { qty: 0, name };
     const newQty = Math.max(0, current.qty + delta);
     if (newQty === 0) {
-        const newDeltas = { ...deltas };
-        delete newDeltas[key];
-        setDeltas(newDeltas);
+      const newDeltas = { ...deltas };
+      delete newDeltas[key];
+      setDeltas(newDeltas);
     } else {
-        setDeltas({ ...deltas, [key]: { qty: newQty, name } });
+      setDeltas({ ...deltas, [key]: { qty: newQty, name } });
     }
   };
 
@@ -86,49 +91,33 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       alert('Demo Mode: Orders are not saved.');
       return;
     }
-
     const entries = Object.entries(deltas);
     if (entries.length === 0) {
-        alert('Please add items to order.');
-        return;
+      alert('Please add items to order.');
+      return;
     }
-
     setLoading(true);
     let successCount = 0;
     let lastError = null;
-
     for (const [_, data] of entries) {
       const { error } = await supabase.from('orders').insert({
         shop_id: selectedShop,
         lens_details: { name: data.name },
         quantity: data.qty
       });
-      if (error) {
-        console.error(error);
-        lastError = error;
-      } else {
-        successCount++;
-      }
+      if (error) { console.error(error); lastError = error; }
+      else { successCount++; }
     }
-
     setLoading(false);
-    if (successCount > 0) {
-        alert(`Orders saved successfully! (${successCount} items)`);
-        setDeltas({});
-    } else if (lastError) {
-        alert('Failed to save orders. Error: ' + (lastError as any).message);
-    }
+    if (successCount > 0) { alert(`Orders saved successfully! (${successCount} items)`); setDeltas({}); }
+    else if (lastError) { alert('Failed to save orders. Error: ' + (lastError as any).message); }
   };
 
   const toggleCoating = (c: string) => {
     if (c === 'Photo Grey') {
-      if (coatings.includes(c)) {
-        setCoatings(coatings.filter(item => item !== c));
-      } else {
-        setCoatings([...coatings, c]);
-      }
+      if (coatings.includes(c)) { setCoatings(coatings.filter(item => item !== c)); }
+      else { setCoatings([...coatings, c]); }
     } else {
-      // Non-Photo Grey coatings are mutually exclusive and one is compulsory
       const photoGreySelected = coatings.includes('Photo Grey');
       setCoatings(photoGreySelected ? ['Photo Grey', c] : [c]);
     }
@@ -146,144 +135,30 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const generateOrderReport = async () => {
     setLoading(true);
     const today = new Date().toISOString().split('T')[0];
-    const { data: orders } = await supabase
-        .from('orders')
-        .select('lens_details, quantity')
-        .gte('created_at', today);
-
-    if (!orders || orders.length === 0) {
-        setLoading(false);
-        alert('No orders found for today to generate report.');
-        return;
-    }
-
+    const { data: orders } = await supabase.from('orders').select('lens_details, quantity').gte('created_at', today);
+    if (!orders || orders.length === 0) { setLoading(false); alert('No orders found for today to generate report.'); return; }
     const summary: Record<string, number> = {};
-    orders.forEach(o => {
-        let name = o.lens_details.name;
-        summary[name] = (summary[name] || 0) + Number(o.quantity);
-    });
-
+    orders.forEach(o => { let name = o.lens_details.name; summary[name] = (summary[name] || 0) + Number(o.quantity); });
     const items = Object.entries(summary).sort((a, b) => sortLensNames(a[0], b[0]));
-    const dateStr = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
-
-    // Threshold to fill left column before moving to right
+    const dateStr = new Date().toLocaleDateString('en-GB');
     const MAX_ROWS_PER_COL = 40;
     const col1 = items.slice(0, MAX_ROWS_PER_COL);
     const col2 = items.slice(MAX_ROWS_PER_COL);
-
     setLoading(false);
     const win = window.open('', '_blank');
     if (win) {
-        win.document.write(`
-            <html>
-                <head>
-                    <title>Combined Order - ${dateStr}</title>
-                    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-                    <style>
-                        @page { size: A4; margin: 0; }
-                        body { font-family: 'Courier New', Courier, monospace; font-size: 11px; margin: 0; padding: 0; background: #f0f0f0; }
-                        .controls { background: #333; padding: 10px; display: flex; gap: 10px; justify-content: center; position: sticky; top: 0; z-index: 100; }
-                        .btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; }
-                        .btn:hover { background: #4338ca; }
-                        .page-container { background: white; width: 210mm; min-height: 297mm; margin: 20px auto; padding: 10mm; box-shadow: 0 0 10px rgba(0,0,0,0.1); box-sizing: border-box; }
-                        .header { border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; font-size: 16px; }
-                        .columns { display: flex; gap: 10px; }
-                        .column { flex: 1; }
-                        table { width: 100%; border-collapse: collapse; }
-                        th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
-                        th { background: #f0f0f0; font-size: 9px; text-transform: uppercase; }
-                        .qty-col { width: 40px; text-align: center; font-weight: bold; }
-                        @media print { .controls { display: none; } .page-container { margin: 0; box-shadow: none; border: none; width: 100%; } body { background: white; } }
-                    </style>
-                </head>
-                <body>
-                    <div class="controls">
-                        <button class="btn" onclick="window.print()">Print / Save PDF</button>
-                        <button class="btn" onclick="downloadJPG()">Download JPG</button>
-                    </div>
-                    <div id="capture" class="page-container">
-                        <div class="header">
-                            DATE: ${dateStr}
-                        </div>
-                        <div class="columns">
-                            <div class="column">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Lens Power</th>
-                                            <th class="qty-col">Qty</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${col1.map(item => `
-                                            <tr>
-                                                <td>${item[0]}</td>
-                                                <td class="qty-col">${formatReportQty(item[1])}</td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div class="column">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Lens Power</th>
-                                            <th class="qty-col">Qty</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${col2.map(item => `
-                                            <tr>
-                                                <td>${item[0]}</td>
-                                                <td class="qty-col">${formatReportQty(item[1])}</td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                    <script>
-                        function downloadJPG() {
-                            const btn = document.querySelector('button[onclick="downloadJPG()"]');
-                            if (btn) {
-                                btn.disabled = true;
-                                btn.innerText = 'Generating...';
-                            }
-                            html2canvas(document.querySelector("#capture"), { scale: 2 }).then(canvas => {
-                                const link = document.createElement('a');
-                                link.download = 'Combined_Order_${dateStr.replace(/\//g, '-')}.jpg';
-                                link.href = canvas.toDataURL('image/jpeg', 0.9);
-                                link.click();
-                                if (btn) {
-                                    btn.disabled = false;
-                                    btn.innerText = 'Download JPG';
-                                }
-                            });
-                        }
-                    </script>
-                </body>
-            </html>
-        `);
-        win.document.close();
+      win.document.write(`<html><head><title>Combined Order - ${dateStr}</title><script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script><style>@page{size:A4;margin:0}body{font-family:'Courier New',Courier,monospace;font-size:11px;margin:0;padding:0;background:#f0f0f0}.controls{background:#333;padding:10px;display:flex;gap:10px;justify-content:center;position:sticky;top:0;z-index:100}.btn{background:#4f46e5;color:white;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-family:sans-serif;font-size:14px}.btn:hover{background:#4338ca}.page-container{background:white;width:210mm;min-height:297mm;margin:20px auto;padding:10mm;box-shadow:0 0 10px rgba(0,0,0,0.1);box-sizing:border-box}.header{border-bottom:2px solid black;padding-bottom:10px;margin-bottom:20px;text-align:center;font-weight:bold;font-size:16px}.columns{display:flex;gap:10px}.column{flex:1}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}th{background:#f0f0f0;font-size:9px;text-transform:uppercase}.qty-col{width:40px;text-align:center;font-weight:bold}@media print{.controls{display:none}.page-container{margin:0;box-shadow:none;border:none;width:100%}body{background:white}}</style></head><body><div class="controls"><button class="btn" onclick="window.print()">Print / Save PDF</button><button class="btn" onclick="downloadJPG()">Download JPG</button></div><div id="capture" class="page-container"><div class="header">DATE: ${dateStr}</div><div class="columns"><div class="column"><table><thead><tr><th>Lens Power</th><th class="qty-col">Qty</th></tr></thead><tbody>${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}</tbody></table></div><div class="column"><table><thead><tr><th>Lens Power</th><th class="qty-col">Qty</th></tr></thead><tbody>${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}</tbody></table></div></div></div><script>function downloadJPG(){const btn=document.querySelector('button[onclick="downloadJPG()"]');if(btn){btn.disabled=true;btn.innerText='Generating...'}html2canvas(document.querySelector("#capture"),{scale:2}).then(canvas=>{const link=document.createElement('a');link.download='Combined_Order_${dateStr.replace(/\//g, '-')}.jpg';link.href=canvas.toDataURL('image/jpeg',0.9);link.click();if(btn){btn.disabled=false;btn.innerText='Download JPG'}})}</script></body></html>`);
+      win.document.close();
     }
-    setLoading(false);
   };
-
-  const showAxis = (vision === 'KT' || vision === 'Prograssive') && (powerType !== 'SPH');
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Place Order</h1>
         <div className="flex gap-2">
-            <button onClick={generateOrderReport} className="bg-blue-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-blue-700 shadow-sm transition-colors">
-                <FileText className="w-4 h-4 mr-1" /> Generate Order
-            </button>
-            <button onClick={saveOrder} disabled={loading} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-green-700 disabled:opacity-50 shadow-sm transition-colors">
-                <ShoppingCart className="w-4 h-4 mr-1" /> Save
-            </button>
+          <button onClick={generateOrderReport} className="bg-blue-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-blue-700 shadow-sm transition-colors"><FileText className="w-4 h-4 mr-1" /> Generate Order</button>
+          <button onClick={saveOrder} disabled={loading} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-green-700 disabled:opacity-50 shadow-sm transition-colors"><ShoppingCart className="w-4 h-4 mr-1" /> Save</button>
         </div>
       </div>
 
@@ -293,13 +168,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Shop</label>
             <div className="flex gap-1.5">
               {shops.map(shop => (
-                <button
-                  key={shop.id}
-                  onClick={() => setSelectedShop(shop.id)}
-                  className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${selectedShop === shop.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-                >
-                  {shop.name}
-                </button>
+                <button key={shop.id} onClick={() => setSelectedShop(shop.id)} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${selectedShop === shop.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{shop.name}</button>
               ))}
             </div>
           </div>
@@ -307,13 +176,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Material</label>
             <div className="flex gap-1.5">
               {MATERIALS.map(m => (
-                <button
-                  key={m}
-                  onClick={() => setMaterial(m)}
-                  className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${material === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
-                >
-                  {m}
-                </button>
+                <button key={m} onClick={() => setMaterial(m)} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${material === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{m}</button>
               ))}
             </div>
           </div>
@@ -326,48 +189,30 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className="md:col-span-1">
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Power Type</label>
-                <div className="flex flex-wrap gap-1 mt-1">
-                    {['SPH', 'CYL', 'Compound', 'Cross Compound'].map((type) => (
-                        <button
-                            key={type}
-                            onClick={() => {
-                                setPowerType(type as PowerType);
-                            }}
-                            className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}
-                        >
-                            {type}
-                        </button>
-                    ))}
-                </div>
+          <div className="md:col-span-1">
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Power Type</label>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {['SPH', 'CYL', 'Compound', 'Cross Compound'].map((type) => (
+                <button key={type} onClick={() => setPowerType(type as PowerType)} className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}>{type}</button>
+              ))}
             </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sign</label>
+            <div className="flex gap-1.5 mt-1">
+              <button onClick={() => setSign('+')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '+' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>+</button>
+              <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
+            </div>
+          </div>
+          {(powerType === 'Compound' || powerType === 'Cross Compound') && !isKTOrProg && (
             <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sign</label>
-                <div className="flex gap-1.5 mt-1">
-                    <button onClick={() => setSign('+')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '+' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>+</button>
-                    <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
-                </div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Range</label>
+              <div className="flex gap-1.5 mt-1">
+                <button onClick={() => setCompoundLimit('2.0')} className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '2.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>upto 2.0 cyl</button>
+                <button onClick={() => setCompoundLimit('4.0')} className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '4.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>upto 4 cyl</button>
+              </div>
             </div>
-            {(powerType === 'Compound' || powerType === 'Cross Compound') && !isKTOrProg && (
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Range</label>
-                    <div className="flex gap-1.5 mt-1">
-                        <button
-                            onClick={() => setCompoundLimit('2.0')}
-                            className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '2.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}
-                        >
-                            upto 2.0 cyl
-                        </button>
-                        <button
-                            onClick={() => setCompoundLimit('4.0')}
-                            className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '4.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}
-                        >
-                            upto 4 cyl
-                        </button>
-                    </div>
-                </div>
-            )}
+          )}
         </div>
 
         <div>
@@ -375,29 +220,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1.5">
               {availableCoatings.map(c => (
-                <button
-                  key={c}
-                  onClick={() => toggleCoating(c)}
-                  className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`}
-                >
-                  {c}
-                </button>
+                <button key={c} onClick={() => toggleCoating(c)} className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`}>{c}</button>
               ))}
             </div>
             <div className="flex items-center gap-1.5 ml-auto">
-              <input
-                type="text"
-                value={customCoating}
-                onChange={(e) => setCustomCoating(e.target.value)}
-                placeholder="Add coating..."
-                className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
-              />
-              <button
-                onClick={addCustomCoating}
-                className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 p-1 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
+              <input type="text" value={customCoating} onChange={(e) => setCustomCoating(e.target.value)} placeholder="Add coating..." className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all" />
+              <button onClick={addCustomCoating} className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 p-1 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
             </div>
           </div>
         </div>
@@ -426,28 +254,18 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                   <tr key={rowKey} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>
                     {powerType !== 'SPH' && (
-                        <td className="px-1 py-1.5 text-center">
-                            <select
-                                value={rowAxis || ''}
-                                onChange={(e) => setRowAxes({ ...rowAxes, [rowKey]: parseInt(e.target.value) })}
-                                className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14"
-                            >
-                                <option value="">-</option>
-                                {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
-                            </select>
-                        </td>
+                      <td className="px-1 py-1.5 text-center">
+                        <select value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [rowKey]: parseInt(e.target.value) })} className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14">
+                          <option value="">-</option>
+                          {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                      </td>
                     )}
-                    <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${qty > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}`}>
-                      {qty.toFixed(2)}
-                    </td>
+                    <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${qty > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}`}>{qty.toFixed(2)}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
-                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5, rowAxis, row.add)} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
-                          <Minus className="w-6 h-6" />
-                        </button>
-                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5, rowAxis, row.add)} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
-                          <Plus className="w-6 h-6" />
-                        </button>
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5, rowAxis, row.add)} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Minus className="w-6 h-6" /></button>
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5, rowAxis, row.add)} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"><Plus className="w-6 h-6" /></button>
                       </div>
                     </td>
                   </tr>

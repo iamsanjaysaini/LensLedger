@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
@@ -35,7 +35,12 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [loading, setLoading] = useState(false);
 
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
-  const lensRows = generateLensRows(powerType, compoundLimit, vision);
+
+  // ✅ Fix: useMemo se lensRows stable rahega
+  const lensRows = useMemo(
+    () => generateLensRows(powerType, compoundLimit, vision),
+    [powerType, compoundLimit, vision]
+  );
 
   useEffect(() => {
     const defaultAxis = getDefaultAxis(vision, sign, powerType);
@@ -74,7 +79,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     if (selectedShop && !isDemo) {
       fetchStock();
     }
-    setDeltas({}); // Reset deltas when filters change
+    setDeltas({});
   }, [selectedShop, material, vision, coatings, sign, powerType, compoundLimit, isDemo]);
 
   async function fetchStock() {
@@ -92,16 +97,15 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       query = query.eq('coatings', coatings);
 
       if (powerType === 'SPH') {
-          query = query.eq('cyl', 0);
+        query = query.eq('cyl', 0);
       } else if (powerType === 'CYL') {
-          query = query.gt('cyl', 0).lte('cyl', 6.0);
+        query = query.gt('cyl', 0).lte('cyl', 6.0);
       } else {
-          // Compound / Cross Compound
-          if (compoundLimit === '2.0') {
-              query = query.gte('cyl', 0.25).lte('cyl', 2.0);
-          } else {
-              query = query.gte('cyl', 2.25).lte('cyl', 4.0);
-          }
+        if (compoundLimit === '2.0') {
+          query = query.gte('cyl', 0.25).lte('cyl', 2.0);
+        } else {
+          query = query.gte('cyl', 2.25).lte('cyl', 4.0);
+        }
       }
 
       const { data, error } = await query;
@@ -110,7 +114,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       const stockMap: Record<string, number> = {};
       if (data) {
         data.forEach((item) => {
-          // Use colon as separator to avoid issues with negative numbers
           const key = `${item.sph.toFixed(2)}:${item.cyl.toFixed(2)}:${item.axis || ''}:${item.addition ? item.addition.toFixed(2) : ''}`;
           stockMap[key] = Number(item.quantity);
         });
@@ -166,7 +169,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       };
 
       const { error } = await supabase.from('lens_stock').upsert(update, {
-          onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings'
+        onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings'
       });
       if (error) {
         console.error("Save error:", error);
@@ -178,13 +181,13 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
     setLoading(false);
     if (updatedCount > 0) {
-        alert(`Stock updated successfully! (${updatedCount} items)`);
-        await fetchStock();
-        setDeltas({});
+      alert(`Stock updated successfully! (${updatedCount} items)`);
+      await fetchStock();
+      setDeltas({});
     } else if (lastError) {
-        alert('Failed to save changes. Error: ' + (lastError as any).message);
+      alert('Failed to save changes. Error: ' + (lastError as any).message);
     } else {
-        alert('No changes were applied.');
+      alert('No changes were applied.');
     }
   };
 
@@ -196,7 +199,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         setCoatings([...coatings, c]);
       }
     } else {
-      // Non-Photo Grey coatings are mutually exclusive and one is compulsory
       const photoGreySelected = coatings.includes('Photo Grey');
       setCoatings(photoGreySelected ? ['Photo Grey', c] : [c]);
     }
@@ -210,8 +212,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       setCustomCoating('');
     }
   };
-
-  const showAxis = (vision === 'KT' || vision === 'Prograssive') && (powerType !== 'SPH');
 
   return (
     <div className="space-y-4">
@@ -260,10 +260,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Vision</label>
             <select
               value={vision}
-              onChange={(e) => {
-                  setVision(e.target.value as Vision);
-                  setRowAxes({});
-              }}
+              onChange={(e) => { setVision(e.target.value as Vision); setRowAxes({}); }}
               className="block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]"
             >
               {VISIONS.map(v => <option key={v} value={v}>{v}</option>)}
@@ -272,48 +269,36 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <div className="md:col-span-1">
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Power Type</label>
-                <div className="flex flex-wrap gap-1 mt-1">
-                    {['SPH', 'CYL', 'Compound', 'Cross Compound'].map((type) => (
-                        <button
-                            key={type}
-                            onClick={() => {
-                                setPowerType(type as PowerType);
-                            }}
-                            className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}
-                        >
-                            {type}
-                        </button>
-                    ))}
-                </div>
+          <div className="md:col-span-1">
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Power Type</label>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {['SPH', 'CYL', 'Compound', 'Cross Compound'].map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setPowerType(type as PowerType)}
+                  className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}
+                >
+                  {type}
+                </button>
+              ))}
             </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sign</label>
+            <div className="flex gap-1.5 mt-1">
+              <button onClick={() => setSign('+')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '+' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>+</button>
+              <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
+            </div>
+          </div>
+          {(powerType === 'Compound' || powerType === 'Cross Compound') && (
             <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sign</label>
-                <div className="flex gap-1.5 mt-1">
-                    <button onClick={() => setSign('+')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '+' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>+</button>
-                    <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
-                </div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Range</label>
+              <div className="flex gap-1.5 mt-1">
+                <button onClick={() => setCompoundLimit('2.0')} className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '2.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>upto 2.0 cyl</button>
+                <button onClick={() => setCompoundLimit('4.0')} className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '4.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>upto 4 cyl</button>
+              </div>
             </div>
-            {(powerType === 'Compound' || powerType === 'Cross Compound') && (
-                <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Range</label>
-                    <div className="flex gap-1.5 mt-1">
-                        <button
-                            onClick={() => setCompoundLimit('2.0')}
-                            className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '2.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}
-                        >
-                            upto 2.0 cyl
-                        </button>
-                        <button
-                            onClick={() => setCompoundLimit('4.0')}
-                            className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '4.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}
-                        >
-                            upto 4 cyl
-                        </button>
-                    </div>
-                </div>
-            )}
+          )}
         </div>
 
         <div>
@@ -321,29 +306,12 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1.5">
               {availableCoatings.map(c => (
-                <button
-                  key={c}
-                  onClick={() => toggleCoating(c)}
-                  className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`}
-                >
-                  {c}
-                </button>
+                <button key={c} onClick={() => toggleCoating(c)} className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`}>{c}</button>
               ))}
             </div>
             <div className="flex items-center gap-1.5 ml-auto">
-              <input
-                type="text"
-                value={customCoating}
-                onChange={(e) => setCustomCoating(e.target.value)}
-                placeholder="Add coating..."
-                className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
-              />
-              <button
-                onClick={addCustomCoating}
-                className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 p-1 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
+              <input type="text" value={customCoating} onChange={(e) => setCustomCoating(e.target.value)} placeholder="Add coating..." className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all" />
+              <button onClick={addCustomCoating} className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 p-1 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
             </div>
           </div>
         </div>
@@ -374,16 +342,12 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                   <tr key={rowKey} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>
                     {powerType !== 'SPH' && (
-                        <td className="px-1 py-1.5 text-center">
-                            <select
-                                value={rowAxis || ''}
-                                onChange={(e) => setRowAxes({ ...rowAxes, [rowKey]: parseInt(e.target.value) })}
-                                className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14"
-                            >
-                                <option value="">-</option>
-                                {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
-                            </select>
-                        </td>
+                      <td className="px-1 py-1.5 text-center">
+                        <select value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [rowKey]: parseInt(e.target.value) })} className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14">
+                          <option value="">-</option>
+                          {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                      </td>
                     )}
                     <td className="px-1 py-1.5 whitespace-nowrap text-[10px] text-center text-gray-400 dark:text-gray-500">{origQty.toFixed(2)}</td>
                     <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${delta === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-indigo-600 dark:text-indigo-400'}`}>
@@ -391,18 +355,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
-                        <button
-                          onClick={() => handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, -0.5)}
-                          className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
-                        >
-                          <Minus className="w-6 h-6" />
-                        </button>
-                        <button
-                          onClick={() => handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, 0.5)}
-                          className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
-                        >
-                          <Plus className="w-6 h-6" />
-                        </button>
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, -0.5)} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Minus className="w-6 h-6" /></button>
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, 0.5)} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"><Plus className="w-6 h-6" /></button>
                       </div>
                     </td>
                   </tr>

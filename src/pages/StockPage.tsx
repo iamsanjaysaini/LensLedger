@@ -15,7 +15,7 @@ import {
   PROGRESSIVE_AXIS,
   Shop
 } from '../utils/lensUtils';
-import { Plus, Minus, Save, Edit2, Check, X, Trash2 } from 'lucide-react';
+import { Plus, Minus, Save, Edit2, Check, X, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import { fetchCustomLensRows, saveCustomLensRows, CustomLensRow } from '../utils/lensUtils';
 
 export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
@@ -106,7 +106,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         .eq('sign', sign)
         .eq('power_type', powerType);
 
-      // ✅ Fix: JSON.stringify se coatings array sahi match hoga
       query = query.eq('coatings', `{${coatings.join(',')}}`);
 
       if (powerType === 'SPH') {
@@ -218,7 +217,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const handleEditToggle = () => {
     if (isEditMode) {
-      // Revert if cancelled
       fetchCustomLensRows(material, vision, sign, powerType, compoundLimit).then(custom => {
         if (custom) setCustomRows(custom);
         else setCustomRows(generateLensRows(powerType, compoundLimit, vision));
@@ -231,10 +229,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const handleSaveList = async () => {
     setLoading(true);
     try {
-      // Get current stored rows to identify deleted ones
       const oldRows = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit) || generateLensRows(powerType, compoundLimit, vision);
-
-      // Save new rows
       const { success, error } = await saveCustomLensRows(material, vision, sign, powerType, compoundLimit, customRows);
 
       if (!success) {
@@ -242,7 +237,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         return;
       }
 
-      // Identify deleted rows to clean up stock
       const newKeys = new Set(customRows.map(r => `${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
       const deletedRows = oldRows.filter(r => !newKeys.has(`${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
 
@@ -261,7 +255,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         }
       }
 
-      alert('List saved successfully! Deleted rows stock also removed.');
+      alert('List saved successfully!');
       setIsEditMode(false);
     } catch (e) {
       console.error(e);
@@ -275,6 +269,26 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     if (!window.confirm('Are you sure? Deleting this row will also delete its stock for all shops when you save.')) return;
     const newRows = [...customRows];
     newRows.splice(index, 1);
+    setCustomRows(newRows);
+  };
+
+  // ✅ Row upar move karo
+  const moveRowUp = (index: number) => {
+    if (index === 0) return;
+    const newRows = [...customRows];
+    const temp = newRows[index - 1];
+    newRows[index - 1] = newRows[index];
+    newRows[index] = temp;
+    setCustomRows(newRows);
+  };
+
+  // ✅ Row neeche move karo
+  const moveRowDown = (index: number) => {
+    if (index === customRows.length - 1) return;
+    const newRows = [...customRows];
+    const temp = newRows[index + 1];
+    newRows[index + 1] = newRows[index];
+    newRows[index] = temp;
     setCustomRows(newRows);
   };
 
@@ -416,6 +430,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
           <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800/80 text-center">
               <tr>
+                {isEditMode && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Move</th>}
                 <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Description</th>
                 {powerType !== 'SPH' && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Axis</th>}
                 <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Stock</th>
@@ -431,40 +446,18 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 const key = `${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}:${rowAxis || ''}:${row.add || ''}`;
                 const delta = deltas[key] || 0;
                 const origQty = originalStock[key] || 0;
-
                 const isInsertMode = insertAt === index;
 
                 return (
                   <React.Fragment key={rowKey}>
                     {isInsertMode && (
                       <tr className="bg-yellow-50 dark:bg-yellow-900/20">
-                        <td colSpan={powerType !== 'SPH' ? 5 : 4} className="p-2">
+                        <td colSpan={isEditMode ? (powerType !== 'SPH' ? 6 : 5) : (powerType !== 'SPH' ? 5 : 4)} className="p-2">
                           <div className="flex flex-wrap items-center gap-2">
-                            <input
-                              type="number"
-                              step="0.25"
-                              placeholder="SPH"
-                              className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700"
-                              value={newRowPower.sph}
-                              onChange={(e) => setNewRowPower({ ...newRowPower, sph: e.target.value })}
-                            />
-                            <input
-                              type="number"
-                              step="0.25"
-                              placeholder="CYL"
-                              className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700"
-                              value={newRowPower.cyl}
-                              onChange={(e) => setNewRowPower({ ...newRowPower, cyl: e.target.value })}
-                            />
+                            <input type="number" step="0.25" placeholder="SPH" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.sph} onChange={(e) => setNewRowPower({ ...newRowPower, sph: e.target.value })} />
+                            <input type="number" step="0.25" placeholder="CYL" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.cyl} onChange={(e) => setNewRowPower({ ...newRowPower, cyl: e.target.value })} />
                             {(vision === 'KT' || vision === 'Prograssive') && (
-                              <input
-                                type="number"
-                                step="0.25"
-                                placeholder="ADD"
-                                className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700"
-                                value={newRowPower.add}
-                                onChange={(e) => setNewRowPower({ ...newRowPower, add: e.target.value })}
-                              />
+                              <input type="number" step="0.25" placeholder="ADD" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.add} onChange={(e) => setNewRowPower({ ...newRowPower, add: e.target.value })} />
                             )}
                             <button onClick={confirmInsert} className="bg-green-600 text-white p-1 rounded"><Check className="w-4 h-4" /></button>
                             <button onClick={() => setInsertAt(null)} className="bg-red-600 text-white p-1 rounded"><X className="w-4 h-4" /></button>
@@ -473,47 +466,42 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                       </tr>
                     )}
                     <tr
-                      onContextMenu={(e) => {
-                        if (isEditMode) {
-                          e.preventDefault();
-                          initiateInsert(index);
-                        }
-                      }}
-                      onMouseDown={(e) => {
-                        if (isEditMode) {
-                          const timer = setTimeout(() => initiateInsert(index), 700);
-                          (e.currentTarget as any)._holdTimer = timer;
-                        }
-                      }}
-                      onMouseUp={(e) => {
-                        if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer);
-                      }}
-                      onMouseLeave={(e) => {
-                        if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer);
-                      }}
-                      onTouchStart={(e) => {
-                        if (isEditMode) {
-                          const timer = setTimeout(() => initiateInsert(index), 700);
-                          (e.currentTarget as any)._holdTimer = timer;
-                        }
-                      }}
-                      onTouchEnd={(e) => {
-                        if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer);
-                      }}
-                      className={`hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50 ${isEditMode ? 'cursor-pointer active:bg-indigo-200 dark:active:bg-indigo-900/40 select-none' : ''}`}
+                      onContextMenu={(e) => { if (isEditMode) { e.preventDefault(); initiateInsert(index); } }}
+                      onMouseDown={(e) => { if (isEditMode) { const timer = setTimeout(() => initiateInsert(index), 700); (e.currentTarget as any)._holdTimer = timer; } }}
+                      onMouseUp={(e) => { if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer); }}
+                      onMouseLeave={(e) => { if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer); }}
+                      onTouchStart={(e) => { if (isEditMode) { const timer = setTimeout(() => initiateInsert(index), 700); (e.currentTarget as any)._holdTimer = timer; } }}
+                      onTouchEnd={(e) => { if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer); }}
+                      className={`hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50 ${isEditMode ? 'cursor-pointer select-none' : ''}`}
                     >
+                      {/* ✅ Up/Down buttons — sirf Edit Mode mein dikhenge */}
+                      {isEditMode && (
+                        <td className="px-1 py-1.5 text-center">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <button
+                              onClick={() => moveRowUp(index)}
+                              disabled={index === 0}
+                              className={`p-0.5 rounded transition-colors ${index === 0 ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}
+                            >
+                              <ChevronUp className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => moveRowDown(index)}
+                              disabled={index === customRows.length - 1}
+                              className={`p-0.5 rounded transition-colors ${index === customRows.length - 1 ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}
+                            >
+                              <ChevronDown className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
                       <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300 select-none">
                         {isEditMode && <span className="mr-2 text-gray-400">☰</span>}
                         {name}
                       </td>
                       {powerType !== 'SPH' && (
                         <td className="px-1 py-1.5 text-center">
-                          <select
-                            disabled={isEditMode}
-                            value={rowAxis || ''}
-                            onChange={(e) => setRowAxes({ ...rowAxes, [`${row.sph}-${row.cyl}-${row.add || ''}`]: parseInt(e.target.value) })}
-                            className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14 disabled:opacity-50"
-                          >
+                          <select disabled={isEditMode} value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [`${row.sph}-${row.cyl}-${row.add || ''}`]: parseInt(e.target.value) })} className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14 disabled:opacity-50">
                             <option value="">-</option>
                             {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
                           </select>

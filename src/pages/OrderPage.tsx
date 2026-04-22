@@ -43,7 +43,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function loadRows() {
       setLoading(true);
-      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit);
+      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings); // ✅
       if (custom) {
         setCustomRows(custom);
       } else {
@@ -52,7 +52,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       setLoading(false);
     }
     loadRows();
-  }, [material, vision, sign, powerType, compoundLimit]);
+  }, [material, vision, sign, powerType, compoundLimit, coatings]); // ✅
 
   const lensRows = customRows;
 
@@ -204,10 +204,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               function downloadJPG() {
                 const btn = document.querySelector('button[onclick="downloadJPG()"]');
                 if (btn) { btn.disabled = true; btn.innerText = 'Generating...'; }
-
                 const a4Width = 794;
                 const a4Height = 1123;
-
                 html2canvas(document.querySelector("#capture"), {
                   scale: 2,
                   width: a4Width,
@@ -222,7 +220,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                   ctx.fillStyle = 'white';
                   ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
                   ctx.drawImage(canvas, 0, 0);
-
                   const link = document.createElement('a');
                   link.download = 'Order_${dateStr.replace(/\//g, '-')}.jpg';
                   link.href = finalCanvas.toDataURL('image/jpeg', 0.9);

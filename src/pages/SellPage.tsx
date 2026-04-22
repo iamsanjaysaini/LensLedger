@@ -41,7 +41,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function loadRows() {
       setLoading(true);
-      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit);
+      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings); // ✅
       if (custom) {
         setCustomRows(custom);
       } else {
@@ -50,7 +50,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
       setLoading(false);
     }
     loadRows();
-  }, [material, vision, sign, powerType, compoundLimit]);
+  }, [material, vision, sign, powerType, compoundLimit, coatings]); // ✅
 
   const lensRows = customRows;
 
@@ -106,7 +106,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
         .eq('sign', sign)
         .eq('power_type', powerType);
 
-      // ✅ Fix: JSON.stringify se coatings array sahi match hoga
       query = query.eq('coatings', `{${coatings.join(',')}}`);
 
       if (powerType === 'SPH') {

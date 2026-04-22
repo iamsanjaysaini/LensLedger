@@ -240,20 +240,22 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       const newKeys = new Set(customRows.map(r => `${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
       const deletedRows = oldRows.filter(r => !newKeys.has(`${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
 
-      // ✅ Fix: sirf matching coatings, material, vision, sign, power_type ka stock delete karo
+      // ✅ Fix: coatings ko PostgreSQL array filter se match karo
       if (deletedRows.length > 0) {
         for (const row of deletedRows) {
-          await supabase
+          const { error: delError } = await supabase
             .from('lens_stock')
             .delete()
             .eq('material', material)
             .eq('vision', vision)
             .eq('sign', sign)
             .eq('power_type', powerType)
-            .eq('coatings', `{${coatings.join(',')}}`)
             .eq('sph', parseFloat(row.sph))
             .eq('cyl', parseFloat(row.cyl))
-            .is('addition', row.add ? parseFloat(row.add) as any : null);
+            .is('addition', row.add ? parseFloat(row.add) as any : null)
+            .filter('coatings', 'eq', `{${coatings.join(',')}}`);
+
+          if (delError) console.error('Delete error:', delError);
         }
       }
 
@@ -463,18 +465,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                       {isEditMode && (
                         <td className="px-1 py-1.5 text-center">
                           <div className="flex flex-col items-center gap-0.5">
-                            <button
-                              onClick={() => moveRowUp(index)}
-                              disabled={index === 0}
-                              className={`p-0.5 rounded transition-colors ${index === 0 ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}
-                            >
+                            <button onClick={() => moveRowUp(index)} disabled={index === 0} className={`p-0.5 rounded transition-colors ${index === 0 ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}>
                               <ChevronUp className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => moveRowDown(index)}
-                              disabled={index === customRows.length - 1}
-                              className={`p-0.5 rounded transition-colors ${index === customRows.length - 1 ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}
-                            >
+                            <button onClick={() => moveRowDown(index)} disabled={index === customRows.length - 1} className={`p-0.5 rounded transition-colors ${index === customRows.length - 1 ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}>
                               <ChevronDown className="w-4 h-4" />
                             </button>
                           </div>

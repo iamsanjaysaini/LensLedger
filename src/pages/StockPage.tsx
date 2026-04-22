@@ -240,10 +240,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       const newKeys = new Set(customRows.map(r => `${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
       const deletedRows = oldRows.filter(r => !newKeys.has(`${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
 
-      // ✅ Fix: coatings ko PostgreSQL array filter se match karo
+      // ✅ Fix: addition ke liye .is() sirf null ke liye, value ke liye .eq() use karo
       if (deletedRows.length > 0) {
         for (const row of deletedRows) {
-          const { error: delError } = await supabase
+          let deleteQuery = supabase
             .from('lens_stock')
             .delete()
             .eq('material', material)
@@ -252,9 +252,15 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             .eq('power_type', powerType)
             .eq('sph', parseFloat(row.sph))
             .eq('cyl', parseFloat(row.cyl))
-            .is('addition', row.add ? parseFloat(row.add) as any : null)
             .filter('coatings', 'eq', `{${coatings.join(',')}}`);
 
+          if (row.add) {
+            deleteQuery = deleteQuery.eq('addition', parseFloat(row.add));
+          } else {
+            deleteQuery = deleteQuery.is('addition', null);
+          }
+
+          const { error: delError } = await deleteQuery;
           if (delError) console.error('Delete error:', delError);
         }
       }

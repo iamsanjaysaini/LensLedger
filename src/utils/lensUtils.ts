@@ -43,12 +43,14 @@ export function generatePowerList(includeZero: boolean = true, max: number = 6.0
   return powers;
 }
 
+// ✅ coatings parameter add kiya
 export async function fetchCustomLensRows(
   material: Material,
   vision: Vision,
   sign: Sign | null,
   powerType: PowerType,
-  compoundLimit: string = '2.0'
+  compoundLimit: string = '2.0',
+  coatings: string[] = []
 ): Promise<CustomLensRow[] | null> {
   let query = supabase
     .from('custom_lens_rows')
@@ -56,7 +58,8 @@ export async function fetchCustomLensRows(
     .eq('material', material)
     .eq('vision', vision)
     .eq('power_type', powerType)
-    .eq('compound_limit', compoundLimit);
+    .eq('compound_limit', compoundLimit)
+    .filter('coatings', 'eq', `{${coatings.join(',')}}`); // ✅
 
   if (sign === null) {
     query = query.is('sign', null);
@@ -80,22 +83,24 @@ export async function fetchCustomLensRows(
   }));
 }
 
+// ✅ coatings parameter add kiya
 export async function saveCustomLensRows(
   material: Material,
   vision: Vision,
   sign: Sign | null,
   powerType: PowerType,
   compoundLimit: string = '2.0',
-  rows: CustomLensRow[]
+  rows: CustomLensRow[],
+  coatings: string[] = []
 ) {
-  // First delete existing rows for this configuration
   let deleteQuery = supabase
     .from('custom_lens_rows')
     .delete()
     .eq('material', material)
     .eq('vision', vision)
     .eq('power_type', powerType)
-    .eq('compound_limit', compoundLimit);
+    .eq('compound_limit', compoundLimit)
+    .filter('coatings', 'eq', `{${coatings.join(',')}}`); // ✅
 
   if (sign === null) {
     deleteQuery = deleteQuery.is('sign', null);
@@ -110,13 +115,13 @@ export async function saveCustomLensRows(
     return { error: deleteError };
   }
 
-  // Insert new rows
   const inserts = rows.map((row, index) => ({
     material,
     vision,
     sign,
     power_type: powerType,
     compound_limit: compoundLimit,
+    coatings, // ✅
     sph: parseFloat(row.sph),
     cyl: parseFloat(row.cyl),
     addition: row.add ? parseFloat(row.add) : null,
@@ -219,7 +224,6 @@ export function formatLensName(
   let powerPart = '';
   const signPart = sign || '';
 
-  // Special handle for 0.00
   if (sph === '0.00' && powerType === 'SPH') {
     powerPart = `Plano`;
   } else if (powerType === 'SPH') {
@@ -243,7 +247,6 @@ export function formatLensName(
     axisPart = axis ? `AXIS ${axis}` : '';
   }
 
-  // Formatting: <Power> <ADD> <Axis> <Coating> <Material> <Vision>
   return [powerPart, addPart, axisPart, coatingPart, materialPart, visionPart]
     .filter(part => part !== '')
     .join(' ')
@@ -278,10 +281,8 @@ export function sortLensNames(a: string, b: string): number {
     const lower = name.toLowerCase();
     if (lower.startsWith('plano')) return [-1, 0];
 
-    // Extract numeric values (e.g. -0.75 or 0.25 or -0.25/-0.50)
     const matches = name.match(/[+-]?\d+\.\d+/g);
     if (matches) {
-      // Use absolute values to match stock list order (0.00, 0.25, 0.50...)
       return matches.map(m => Math.abs(parseFloat(m)));
     }
     return [999];

@@ -240,6 +240,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       const newKeys = new Set(customRows.map(r => `${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
       const deletedRows = oldRows.filter(r => !newKeys.has(`${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
 
+      // ✅ Fix: sirf matching coatings, material, vision, sign, power_type ka stock delete karo
       if (deletedRows.length > 0) {
         for (const row of deletedRows) {
           await supabase
@@ -249,9 +250,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             .eq('vision', vision)
             .eq('sign', sign)
             .eq('power_type', powerType)
+            .eq('coatings', `{${coatings.join(',')}}`)
             .eq('sph', parseFloat(row.sph))
             .eq('cyl', parseFloat(row.cyl))
-            .eq('addition', row.add ? parseFloat(row.add) : null);
+            .is('addition', row.add ? parseFloat(row.add) as any : null);
         }
       }
 
@@ -272,7 +274,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     setCustomRows(newRows);
   };
 
-  // ✅ Row upar move karo
   const moveRowUp = (index: number) => {
     if (index === 0) return;
     const newRows = [...customRows];
@@ -282,7 +283,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     setCustomRows(newRows);
   };
 
-  // ✅ Row neeche move karo
   const moveRowDown = (index: number) => {
     if (index === customRows.length - 1) return;
     const newRows = [...customRows];
@@ -295,30 +295,16 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const initiateInsert = (index: number) => {
     setInsertAt(index);
     const row = customRows[index];
-    setNewRowPower({
-      sph: row.sph,
-      cyl: row.cyl,
-      add: row.add || ''
-    });
+    setNewRowPower({ sph: row.sph, cyl: row.cyl, add: row.add || '' });
   };
 
   const confirmInsert = () => {
     if (insertAt === null) return;
-
     const sph = parseFloat(newRowPower.sph);
     const cyl = parseFloat(newRowPower.cyl);
     const add = newRowPower.add ? parseFloat(newRowPower.add) : undefined;
-
-    if (isNaN(sph) || isNaN(cyl)) {
-      alert('Please enter valid SPH and CYL numbers.');
-      return;
-    }
-
-    if ((vision === 'KT' || vision === 'Prograssive') && (add === undefined || isNaN(add))) {
-      alert('Please enter a valid ADD number.');
-      return;
-    }
-
+    if (isNaN(sph) || isNaN(cyl)) { alert('Please enter valid SPH and CYL numbers.'); return; }
+    if ((vision === 'KT' || vision === 'Prograssive') && (add === undefined || isNaN(add))) { alert('Please enter a valid ADD number.'); return; }
     const newRows = [...customRows];
     newRows.splice(insertAt, 0, {
       sph: sph.toFixed(2),
@@ -474,7 +460,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                       onTouchEnd={(e) => { if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer); }}
                       className={`hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50 ${isEditMode ? 'cursor-pointer select-none' : ''}`}
                     >
-                      {/* ✅ Up/Down buttons — sirf Edit Mode mein dikhenge */}
                       {isEditMode && (
                         <td className="px-1 py-1.5 text-center">
                           <div className="flex flex-col items-center gap-0.5">

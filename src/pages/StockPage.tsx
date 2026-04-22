@@ -41,7 +41,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function loadRows() {
       setLoading(true);
-      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit);
+      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings); // ✅
       if (custom) {
         setCustomRows(custom);
       } else {
@@ -50,7 +50,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       setLoading(false);
     }
     loadRows();
-  }, [material, vision, sign, powerType, compoundLimit]);
+  }, [material, vision, sign, powerType, compoundLimit, coatings]);
 
   const lensRows = customRows;
 
@@ -217,7 +217,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const handleEditToggle = () => {
     if (isEditMode) {
-      fetchCustomLensRows(material, vision, sign, powerType, compoundLimit).then(custom => {
+      fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings).then(custom => { // ✅
         if (custom) setCustomRows(custom);
         else setCustomRows(generateLensRows(powerType, compoundLimit, vision));
       });
@@ -229,8 +229,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const handleSaveList = async () => {
     setLoading(true);
     try {
-      const oldRows = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit) || generateLensRows(powerType, compoundLimit, vision);
-      const { success, error } = await saveCustomLensRows(material, vision, sign, powerType, compoundLimit, customRows);
+      const oldRows = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings) || generateLensRows(powerType, compoundLimit, vision); // ✅
+      const { success, error } = await saveCustomLensRows(material, vision, sign, powerType, compoundLimit, customRows, coatings); // ✅
 
       if (!success) {
         alert('Failed to save list: ' + (error as any).message);
@@ -240,7 +240,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       const newKeys = new Set(customRows.map(r => `${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
       const deletedRows = oldRows.filter(r => !newKeys.has(`${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
 
-      // ✅ Fix: addition ke liye .is() sirf null ke liye, value ke liye .eq() use karo
       if (deletedRows.length > 0) {
         for (const row of deletedRows) {
           let deleteQuery = supabase
@@ -486,7 +485,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                       </td>
                       {powerType !== 'SPH' && (
                         <td className="px-1 py-1.5 text-center">
-                          <select disabled={isEditMode} value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [`${row.sph}-${row.cyl}-${row.add || ''}`]: parseInt(e.target.value) })} className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14 disabled:opacity-50">
+                          <select disabled={isEditMode} value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [`${row.sph}-${row.cyl}-${row.add || ''}`]: parseInt(e.target.value) })} className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p0.5 w-14 disabled:opacity-50">
                             <option value="">-</option>
                             {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
                           </select>

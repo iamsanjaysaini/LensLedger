@@ -37,13 +37,14 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [deltas, setDeltas] = useState<Record<string, { qty: number, name: string }>>({});
   const [loading, setLoading] = useState(false);
   const [customRows, setCustomRows] = useState<CustomLensRow[]>([]);
+  const [todayOrders, setTodayOrders] = useState<Record<string, number>>({});
 
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
 
   useEffect(() => {
     async function loadRows() {
       setLoading(true);
-      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings); // ✅
+      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
       if (custom) {
         setCustomRows(custom);
       } else {
@@ -52,9 +53,33 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       setLoading(false);
     }
     loadRows();
-  }, [material, vision, sign, powerType, compoundLimit, coatings]); // ✅
+  }, [material, vision, sign, powerType, compoundLimit, coatings]);
 
   const lensRows = customRows;
+
+  // Fetch today's orders for the selected shop
+  useEffect(() => {
+    if (isDemo || !selectedShop) return;
+    fetchTodayOrders();
+  }, [selectedShop, isDemo]);
+
+  async function fetchTodayOrders() {
+    const today = new Date().toISOString().split('T')[0];
+    const { data } = await supabase
+      .from('orders')
+      .select('lens_details, quantity')
+      .eq('shop_id', selectedShop)
+      .gte('created_at', today);
+
+    if (data) {
+      const summary: Record<string, number> = {};
+      data.forEach(o => {
+        const name = o.lens_details.name;
+        summary[name] = (summary[name] || 0) + Number(o.quantity);
+      });
+      setTodayOrders(summary);
+    }
+  }
 
   useEffect(() => {
     const defaultAxis = getDefaultAxis(vision, sign, powerType);
@@ -116,7 +141,11 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       else { successCount++; }
     }
     setLoading(false);
-    if (successCount > 0) { alert(`Orders saved successfully! (${successCount} items)`); setDeltas({}); }
+    if (successCount > 0) {
+      alert(`Orders saved successfully! (${successCount} items)`);
+      setDeltas({});
+      fetchTodayOrders(); // Refresh today's orders after saving
+    }
     else if (lastError) { alert('Failed to save orders. Error: ' + (lastError as any).message); }
   };
 
@@ -321,6 +350,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               <tr>
                 <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Description</th>
                 {powerType !== 'SPH' && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Axis</th>}
+                <th className="px-1 py-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest w-20">Today's Qty</th>
                 <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Qty</th>
                 <th className="px-2 py-1.5 text-right text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-20">Actions</th>
               </tr>
@@ -332,9 +362,10 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                 const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, rowAxis, row.add);
                 const stateKey = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${row.sph}-${row.cyl}-${rowAxis || ''}-${coatings.join(',')}-${isKTOrProg ? row.add : ''}`;
                 const qty = deltas[stateKey]?.qty || 0;
+                const todayQty = todayOrders[name] || 0;
 
                 return (
-                  <tr key={rowKey} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
+                  <tr key={rowKey} className={`hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50 ${todayQty > 0 ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}`}>
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>
                     {powerType !== 'SPH' && (
                       <td className="px-1 py-1.5 text-center">
@@ -344,6 +375,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                         </select>
                       </td>
                     )}
+                    <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${todayQty > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-300 dark:text-gray-600'}`}>
+                      {todayQty > 0 ? formatReportQty(todayQty) : '-'}
+                    </td>
                     <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${qty > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}`}>{qty.toFixed(2)}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">

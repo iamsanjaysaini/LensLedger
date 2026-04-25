@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
@@ -15,7 +15,8 @@ import {
   Sign,
   KT_AXIS,
   PROGRESSIVE_AXIS,
-  Shop
+  Shop,
+  getDefaultShopId
 } from '../utils/lensUtils';
 import { Plus, Tag } from 'lucide-react';
 
@@ -41,7 +42,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function loadRows() {
       setLoading(true);
-      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings); // ✅
+      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
       if (custom) {
         setCustomRows(custom);
       } else {
@@ -50,7 +51,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
       setLoading(false);
     }
     loadRows();
-  }, [material, vision, sign, powerType, compoundLimit, coatings]); // ✅
+  }, [material, vision, sign, powerType, compoundLimit, coatings]);
 
   const lensRows = customRows;
 
@@ -78,10 +79,15 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
         setSelectedShop(demoShops[0].id);
         return;
       }
+
       const { data } = await supabase.from('shops').select('*');
       if (data && data.length > 0) {
         setShops(data);
-        setSelectedShop(data[0].id);
+
+        // ✅ Default Shop Mapping
+        const { data: { user } } = await supabase.auth.getUser();
+        const email = user?.email || '';
+        setSelectedShop(getDefaultShopId(data, email));
       }
     }
     fetchShops();

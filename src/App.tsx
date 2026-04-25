@@ -5,8 +5,9 @@ import Dashboard from './pages/Dashboard';
 import StockPage from './pages/StockPage';
 import OrderPage from './pages/OrderPage';
 import SellPage from './pages/SellPage';
+import ReportsPage from './pages/ReportsPage';
 import Auth from './components/Auth';
-import { LayoutDashboard, Package, ShoppingCart, LogOut, Tag } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, LogOut, Tag, FileText } from 'lucide-react';
 import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 
 function App() {
@@ -92,6 +93,13 @@ function App() {
                   <Tag className="w-4 h-4 mr-2" />
                   Sell
                 </Link>
+                <Link
+                  to="/reports"
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/reports' ? 'border-indigo-500 text-gray-900 dark:text-white lg:!text-amber-400 lg:!border-amber-400 lg:dark:!text-amber-400 lg:dark:!border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:!text-amber-600/70 lg:hover:!text-amber-400 lg:dark:!text-amber-600/60 lg:dark:hover:!text-amber-400'}`}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Reports
+                </Link>
               </div>
             </div>
             <div className="flex items-center space-x-2 sm:space-x-4">
@@ -114,7 +122,7 @@ function App() {
 
         {/* Mobile menu */}
         <div className="sm:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-2">
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-5 gap-1">
             <Link
               to="/"
               className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
@@ -143,6 +151,13 @@ function App() {
               <Tag className="w-5 h-5 mb-1" />
               Sell
             </Link>
+            <Link
+              to="/reports"
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/reports' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+            >
+              <FileText className="w-5 h-5 mb-1" />
+              Reports
+            </Link>
           </div>
         </div>
       </nav>
@@ -153,6 +168,7 @@ function App() {
           <Route path="/stock" element={<StockPage isDemo={!isConfigured} />} />
           <Route path="/order" element={<OrderPage isDemo={!isConfigured} />} />
           <Route path="/sell" element={<SellPage isDemo={!isConfigured} />} />
+          <Route path="/reports" element={<ReportsPage isDemo={!isConfigured} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

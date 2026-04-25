@@ -278,7 +278,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
         <div className="overflow-x-auto">
-          <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <table className="w-full md:w-auto divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800/80 text-center">
               <tr>
                 <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Description</th>

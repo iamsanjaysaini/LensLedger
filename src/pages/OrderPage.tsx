@@ -378,8 +378,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                     <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${todayQty > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-300 dark:text-gray-600'}`}>
                       {todayQty > 0 ? formatReportQty(todayQty) : '-'}
                     </td>
-                    <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${qty > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}`}>{qty.toFixed(2)}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap text-right">
+<td className={`px-1 py-1.5 whitespace-nowrap text-sm text-center font-extrabold ${qty > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-500'}`}>{qty.toFixed(2)}</td>                    <td className="px-2 py-1.5 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
                         <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5, rowAxis, row.add)} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Minus className="w-6 h-6" /></button>
                         <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5, rowAxis, row.add)} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"><Plus className="w-6 h-6" /></button>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
@@ -13,10 +13,13 @@ import {
   Sign,
   KT_AXIS,
   PROGRESSIVE_AXIS,
-  Shop
+  Shop,
+  getDefaultShopId,
+  fetchCustomLensRows,
+  saveCustomLensRows,
+  CustomLensRow
 } from '../utils/lensUtils';
 import { Plus, Minus, Save, Edit2, Check, X, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
-import { fetchCustomLensRows, saveCustomLensRows, CustomLensRow } from '../utils/lensUtils';
 
 export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -41,7 +44,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function loadRows() {
       setLoading(true);
-      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings); // ✅
+      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
       if (custom) {
         setCustomRows(custom);
       } else {
@@ -78,10 +81,15 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         setSelectedShop(demoShops[0].id);
         return;
       }
+
       const { data } = await supabase.from('shops').select('*');
       if (data && data.length > 0) {
         setShops(data);
-        setSelectedShop(data[0].id);
+
+        // ✅ Default Shop Mapping
+        const { data: { user } } = await supabase.auth.getUser();
+        const email = user?.email || '';
+        setSelectedShop(getDefaultShopId(data, email));
       }
     }
     fetchShops();
@@ -217,7 +225,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const handleEditToggle = () => {
     if (isEditMode) {
-      fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings).then(custom => { // ✅
+      fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings).then(custom => {
         if (custom) setCustomRows(custom);
         else setCustomRows(generateLensRows(powerType, compoundLimit, vision));
       });
@@ -229,8 +237,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const handleSaveList = async () => {
     setLoading(true);
     try {
-      const oldRows = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings) || generateLensRows(powerType, compoundLimit, vision); // ✅
-      const { success, error } = await saveCustomLensRows(material, vision, sign, powerType, compoundLimit, customRows, coatings); // ✅
+      const oldRows = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings) || generateLensRows(powerType, compoundLimit, vision);
+      const { success, error } = await saveCustomLensRows(material, vision, sign, powerType, compoundLimit, customRows, coatings);
 
       if (!success) {
         alert('Failed to save list: ' + (error as any).message);
@@ -485,14 +493,14 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                       </td>
                       {powerType !== 'SPH' && (
                         <td className="px-1 py-1.5 text-center">
-                          <select disabled={isEditMode} value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [`${row.sph}-${row.cyl}-${row.add || ''}`]: parseInt(e.target.value) })} className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p0.5 w-14 disabled:opacity-50">
+                          <select disabled={isEditMode} value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [`${row.sph}-${row.cyl}-${row.add || ''}`]: parseInt(e.target.value) })} className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14 disabled:opacity-50">
                             <option value="">-</option>
                             {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
                           </select>
                         </td>
                       )}
                       <td className="px-1 py-1.5 whitespace-nowrap text-sm font-bold text-center text-gray-600 dark:text-gray-300">{origQty.toFixed(2)}</td>
-<td className={`px-1 py-1.5 whitespace-nowrap text-sm text-center font-extrabold ${delta === 0 ? 'text-gray-400 dark:text-gray-500' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                      <td className={`px-1 py-1.5 whitespace-nowrap text-sm text-center font-extrabold ${delta === 0 ? 'text-gray-400 dark:text-gray-500' : 'text-indigo-600 dark:text-indigo-400'}`}>
                         {delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}
                       </td>
                       <td className="px-2 py-1.5 whitespace-nowrap text-right">

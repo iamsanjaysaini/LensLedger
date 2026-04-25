@@ -252,60 +252,151 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             <title>Order Report - ${dateStr}</title>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
             <style>
-              @page { size: A4; margin: 0; }
-              * { box-sizing: border-box; }
-              body { font-family: 'Courier New', Courier, monospace; font-size: 11px; margin: 0; padding: 0; background: white; }
-              .controls { padding: 8px 16px; display: flex; gap: 10px; justify-content: center; background: white; border-bottom: 1px solid #eee; }
-              .btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; }
+              /* ── Screen styles ── */
+              * { box-sizing: border-box; margin: 0; padding: 0; }
+
+              body {
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 11pt;
+                background: #e5e7eb;
+              }
+
+              .controls {
+                padding: 10px 16px;
+                display: flex;
+                gap: 10px;
+                justify-content: center;
+                background: #1e293b;
+                position: sticky;
+                top: 0;
+                z-index: 10;
+              }
+              .btn {
+                background: #4f46e5;
+                color: white;
+                border: none;
+                padding: 8px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-family: sans-serif;
+                font-size: 13px;
+                font-weight: 600;
+                letter-spacing: 0.3px;
+              }
               .btn:hover { background: #4338ca; }
-              .page-container { background: white; width: 794px; min-height: 1123px; padding: 10mm; margin: 0 auto; }
-              .header { border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; font-size: 16px; }
-              .columns { display: flex; gap: 10px; }
+              .btn.secondary { background: #0891b2; }
+              .btn.secondary:hover { background: #0e7490; }
+
+              /* ── A4 Page ── */
+              .page-wrapper {
+                display: flex;
+                justify-content: center;
+                padding: 24px 16px 48px;
+              }
+
+              .page-container {
+                background: white;
+                width: 210mm;
+                min-height: 297mm;
+                padding: 15mm 12mm 15mm 12mm;
+                box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+              }
+
+              .header {
+                border-bottom: 2.5px solid black;
+                padding-bottom: 8px;
+                margin-bottom: 14px;
+                text-align: center;
+                font-weight: bold;
+                font-size: 15pt;
+                letter-spacing: 1px;
+              }
+
+              .columns {
+                display: flex;
+                gap: 8mm;
+                align-items: flex-start;
+              }
               .column { flex: 1; }
-              table { width: 100%; border-collapse: collapse; }
-              td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
-              .qty-col { width: 40px; text-align: center; font-weight: bold; }
-              @media print { .controls { display: none; } body { background: white; } }
+
+              table {
+                width: 100%;
+                border-collapse: collapse;
+              }
+              td {
+                border: 0.5px solid #aaa;
+                padding: 3.5px 6px;
+                text-align: left;
+                font-size: 9.5pt;
+                line-height: 1.3;
+              }
+              .qty-col {
+                width: 32px;
+                text-align: center;
+                font-weight: bold;
+              }
+
+              /* ── Print styles ── */
+              @media print {
+                @page {
+                  size: A4 portrait;
+                  margin: 15mm 12mm;
+                }
+                * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                body { background: white; }
+                .controls { display: none !important; }
+                .page-wrapper { padding: 0; }
+                .page-container {
+                  width: 100%;
+                  min-height: auto;
+                  padding: 0;
+                  box-shadow: none;
+                }
+                .header { font-size: 14pt; }
+                td { font-size: 9pt; padding: 3px 5px; }
+              }
             </style>
           </head>
           <body>
             <div class="controls">
-              <button class="btn" onclick="window.print()">Print / Save PDF</button>
-              <button class="btn" onclick="downloadJPG()">Download JPG</button>
+              <button class="btn" onclick="window.print()">🖨️ Print / Save PDF</button>
+              <button class="btn secondary" onclick="downloadJPG()">📥 Download JPG</button>
             </div>
-            <div id="capture" class="page-container">
-              <div class="header">DATE: ${dateStr}</div>
-              <div class="columns">
-                <div class="column">
-                  <table><tbody>
-                    ${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
-                  </tbody></table>
-                </div>
-                <div class="column">
-                  <table><tbody>
-                    ${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
-                  </tbody></table>
+            <div class="page-wrapper">
+              <div id="capture" class="page-container">
+                <div class="header">DATE: ${dateStr}</div>
+                <div class="columns">
+                  <div class="column">
+                    <table><tbody>
+                      ${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
+                    </tbody></table>
+                  </div>
+                  <div class="column">
+                    <table><tbody>
+                      ${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
+                    </tbody></table>
+                  </div>
                 </div>
               </div>
             </div>
             <script>
               function downloadJPG() {
-                const btn = document.querySelector('button[onclick="downloadJPG()"]');
-                if (btn) { btn.disabled = true; btn.innerText = 'Generating...'; }
-                const a4Width = 794; const a4Height = 1123;
-                html2canvas(document.querySelector("#capture"), {
-                  scale: 2, width: a4Width, height: a4Height, windowWidth: a4Width, windowHeight: a4Height
+                const btn = event.target;
+                btn.disabled = true; btn.innerText = 'Generating...';
+                const capture = document.querySelector('#capture');
+                const a4Px = 794; const a4Ht = 1123;
+                html2canvas(capture, {
+                  scale: 2,
+                  useCORS: true,
+                  width: capture.offsetWidth,
+                  height: capture.offsetHeight,
+                  windowWidth: capture.offsetWidth
                 }).then(canvas => {
-                  const finalCanvas = document.createElement('canvas');
-                  finalCanvas.width = a4Width * 2; finalCanvas.height = a4Height * 2;
-                  const ctx = finalCanvas.getContext('2d');
-                  ctx.fillStyle = 'white'; ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
-                  ctx.drawImage(canvas, 0, 0);
                   const link = document.createElement('a');
                   link.download = 'Order_${dateStr.replace(/\//g, '-')}.jpg';
-                  link.href = finalCanvas.toDataURL('image/jpeg', 0.9);
+                  link.href = canvas.toDataURL('image/jpeg', 0.92);
                   link.click();
-                  if (btn) { btn.disabled = false; btn.innerText = 'Download JPG'; }
+                  btn.disabled = false; btn.innerText = '📥 Download JPG';
                 });
               }
             </script>

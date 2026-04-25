@@ -383,18 +383,38 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               function downloadJPG() {
                 const btn = event.target;
                 btn.disabled = true; btn.innerText = 'Generating...';
-                const capture = document.querySelector('#capture');
-                const a4Px = 794; const a4Ht = 1123;
-                html2canvas(capture, {
-                  scale: 2,
+
+                // A4 at 300 DPI = 2480 x 3508 px (International A4: 210mm x 297mm)
+                const A4_W = 2480;
+                const A4_H = 3508;
+                const RENDER_W = 794;  // A4 at 96dpi — browser rendering base
+                const RENDER_H = 1123;
+
+                // scale=4 → renders at 3176x4492 (high quality), then downscale to 2480x3508
+                html2canvas(document.querySelector('#capture'), {
+                  scale: 4,
                   useCORS: true,
-                  width: capture.offsetWidth,
-                  height: capture.offsetHeight,
-                  windowWidth: capture.offsetWidth
+                  width: RENDER_W,
+                  height: RENDER_H,
+                  windowWidth: RENDER_W,
+                  windowHeight: RENDER_H,
+                  scrollX: 0,
+                  scrollY: 0
                 }).then(canvas => {
+                  // Draw onto exact A4 @ 300dpi canvas (downscaling = sharp result)
+                  const finalCanvas = document.createElement('canvas');
+                  finalCanvas.width = A4_W;
+                  finalCanvas.height = A4_H;
+                  const ctx = finalCanvas.getContext('2d');
+                  ctx.imageSmoothingEnabled = true;
+                  ctx.imageSmoothingQuality = 'high';
+                  ctx.fillStyle = 'white';
+                  ctx.fillRect(0, 0, A4_W, A4_H);
+                  ctx.drawImage(canvas, 0, 0, A4_W, A4_H);
+
                   const link = document.createElement('a');
                   link.download = 'Order_${dateStr.replace(/\//g, '-')}.jpg';
-                  link.href = canvas.toDataURL('image/jpeg', 0.92);
+                  link.href = finalCanvas.toDataURL('image/jpeg', 0.95);
                   link.click();
                   btn.disabled = false; btn.innerText = '📥 Download JPG';
                 });

@@ -491,8 +491,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                           </select>
                         </td>
                       )}
-                      <td className="px-1 py-1.5 whitespace-nowrap text-[10px] text-center text-gray-400 dark:text-gray-500">{origQty.toFixed(2)}</td>
-                      <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${delta === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                      <td className="px-1 py-1.5 whitespace-nowrap text-sm font-bold text-center text-gray-600 dark:text-gray-300">{origQty.toFixed(2)}</td>
+<td className={`px-1 py-1.5 whitespace-nowrap text-sm text-center font-extrabold ${delta === 0 ? 'text-gray-400 dark:text-gray-500' : 'text-indigo-600 dark:text-indigo-400'}`}>
                         {delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}
                       </td>
                       <td className="px-2 py-1.5 whitespace-nowrap text-right">

@@ -59,8 +59,9 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <Link to="/" className="flex-shrink-0 flex items-center group">
-                <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400 lg:!text-amber-500 lg:dark:!text-amber-500 lg:font-black lg:tracking-tight transition-all">LensLedger</span>
+              <Link to="/" className="flex-shrink-0 flex flex-col justify-center group">
+                <span className="text-[10px] leading-tight font-bold text-gray-400 dark:text-gray-500 lg:!text-amber-600/70 uppercase tracking-[0.2em] transition-all">S.S. Opticals</span>
+                <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400 lg:!text-amber-500 lg:dark:!text-amber-500 lg:font-black lg:tracking-tight transition-all -mt-1">LensLedger</span>
               </Link>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                 <Link

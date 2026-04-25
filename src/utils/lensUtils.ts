@@ -34,6 +34,19 @@ export const MATERIALS: Material[] = ['CR', 'Poly', 'Glass'];
 export const VISIONS: Vision[] = ['single vision', 'KT', 'Prograssive'];
 export const DEFAULT_COATINGS = ['HC', 'HMC', 'Bluecut green', 'Bluecut Dual coat', 'Bluecut Blue', 'Photo Grey'];
 
+// ✅ Default Shop Mapping — email ke hisaab se default shop name
+export const DEFAULT_SHOP_MAPPING: Record<string, string> = {
+  'iamsanjaysaini@gmail.com': 'SS Opticals',
+  'sumitsainibrd@gmail.com': 'Narbada Eye Care',
+};
+
+// ✅ Helper function — shops array aur email do, default shop id milega
+export function getDefaultShopId(shops: Shop[], email: string): string {
+  const shopName = DEFAULT_SHOP_MAPPING[email];
+  const matched = shopName ? shops.find(s => s.name === shopName) : null;
+  return matched ? matched.id : shops[0].id;
+}
+
 export function generatePowerList(includeZero: boolean = true, max: number = 6.0) {
   const powers = [];
   const start = includeZero ? 0 : 0.25;
@@ -43,7 +56,6 @@ export function generatePowerList(includeZero: boolean = true, max: number = 6.0
   return powers;
 }
 
-// ✅ coatings parameter add kiya
 export async function fetchCustomLensRows(
   material: Material,
   vision: Vision,
@@ -59,7 +71,7 @@ export async function fetchCustomLensRows(
     .eq('vision', vision)
     .eq('power_type', powerType)
     .eq('compound_limit', compoundLimit)
-    .filter('coatings', 'eq', `{${coatings.join(',')}}`); // ✅
+    .filter('coatings', 'eq', `{${coatings.join(',')}}`);
 
   if (sign === null) {
     query = query.is('sign', null);
@@ -83,7 +95,6 @@ export async function fetchCustomLensRows(
   }));
 }
 
-// ✅ coatings parameter add kiya
 export async function saveCustomLensRows(
   material: Material,
   vision: Vision,
@@ -100,7 +111,7 @@ export async function saveCustomLensRows(
     .eq('vision', vision)
     .eq('power_type', powerType)
     .eq('compound_limit', compoundLimit)
-    .filter('coatings', 'eq', `{${coatings.join(',')}}`); // ✅
+    .filter('coatings', 'eq', `{${coatings.join(',')}}`);
 
   if (sign === null) {
     deleteQuery = deleteQuery.is('sign', null);
@@ -121,7 +132,7 @@ export async function saveCustomLensRows(
     sign,
     power_type: powerType,
     compound_limit: compoundLimit,
-    coatings, // ✅
+    coatings,
     sph: parseFloat(row.sph),
     cyl: parseFloat(row.cyl),
     addition: row.add ? parseFloat(row.add) : null,

@@ -380,28 +380,44 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               </div>
             </div>
             <script>
+              // JPEG binary mein 300 DPI metadata embed karo
+              function setJpegDPI(dataUrl, dpi) {
+                const binary = atob(dataUrl.split(',')[1]);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+                // JFIF APP0 marker: FF E0 — yahan DPI data hota hai
+                if (bytes[2] === 0xFF && bytes[3] === 0xE0) {
+                  bytes[11] = 0x01;                   // units = DPI
+                  bytes[12] = Math.floor(dpi / 256);  // X DPI high byte
+                  bytes[13] = dpi % 256;              // X DPI low byte
+                  bytes[14] = Math.floor(dpi / 256);  // Y DPI high byte
+                  bytes[15] = dpi % 256;              // Y DPI low byte
+                }
+
+                let str = '';
+                bytes.forEach(b => str += String.fromCharCode(b));
+                return 'data:image/jpeg;base64,' + btoa(str);
+              }
+
               function downloadJPG() {
                 const btn = event.target;
                 btn.disabled = true; btn.innerText = 'Generating...';
 
-                // A4 at 300 DPI = 2480 x 3508 px (International A4: 210mm x 297mm)
+                // A4 at 300 DPI = 2480 x 3508 px
                 const A4_W = 2480;
                 const A4_H = 3508;
-                const RENDER_W = 794;  // A4 at 96dpi — browser rendering base
-                const RENDER_H = 1123;
 
-                // scale=4 → renders at 3176x4492 (high quality), then downscale to 2480x3508
                 html2canvas(document.querySelector('#capture'), {
                   scale: 4,
                   useCORS: true,
-                  width: RENDER_W,
-                  height: RENDER_H,
-                  windowWidth: RENDER_W,
-                  windowHeight: RENDER_H,
+                  width: 794,
+                  height: 1123,
+                  windowWidth: 794,
+                  windowHeight: 1123,
                   scrollX: 0,
                   scrollY: 0
                 }).then(canvas => {
-                  // Draw onto exact A4 @ 300dpi canvas (downscaling = sharp result)
                   const finalCanvas = document.createElement('canvas');
                   finalCanvas.width = A4_W;
                   finalCanvas.height = A4_H;
@@ -412,9 +428,13 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                   ctx.fillRect(0, 0, A4_W, A4_H);
                   ctx.drawImage(canvas, 0, 0, A4_W, A4_H);
 
+                  // 300 DPI metadata embed karo JPEG mein
+                  const rawDataUrl = finalCanvas.toDataURL('image/jpeg', 0.95);
+                  const dpiDataUrl = setJpegDPI(rawDataUrl, 300);
+
                   const link = document.createElement('a');
                   link.download = 'Order_${dateStr.replace(/\//g, '-')}.jpg';
-                  link.href = finalCanvas.toDataURL('image/jpeg', 0.95);
+                  link.href = dpiDataUrl;
                   link.click();
                   btn.disabled = false; btn.innerText = '📥 Download JPG';
                 });

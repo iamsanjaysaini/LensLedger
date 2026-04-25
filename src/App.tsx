@@ -147,7 +147,7 @@ function App() {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+      <main className="max-w-7xl py-4 px-4 sm:px-6 lg:px-8">
         <Routes>
           <Route path="/" element={<Dashboard isDemo={!isConfigured} />} />
           <Route path="/stock" element={<StockPage isDemo={!isConfigured} />} />

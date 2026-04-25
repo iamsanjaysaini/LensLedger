@@ -420,7 +420,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
         <div className="overflow-x-auto">
-          <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <table className="w-full md:w-auto divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800/80 text-center">
               <tr>
                 {isEditMode && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Move</th>}

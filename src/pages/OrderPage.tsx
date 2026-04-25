@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
@@ -20,7 +20,13 @@ import {
   sortLensNames,
   getDefaultShopId
 } from '../utils/lensUtils';
-import { Plus, Minus, ShoppingCart, FileText } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, FileText, Trash2 } from 'lucide-react';
+
+interface CustomOrderEntry {
+  id: string;
+  name: string;
+  qty: string; // store as string jaise user ne likha
+}
 
 export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -38,17 +44,20 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [customRows, setCustomRows] = useState<CustomLensRow[]>([]);
 
+  // Custom order entries
+  const [customEntries, setCustomEntries] = useState<CustomOrderEntry[]>([]);
+  const [customName, setCustomName] = useState('');
+  const [customQty, setCustomQty] = useState('');
+  const customNameRef = useRef<HTMLInputElement>(null);
+
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
 
   useEffect(() => {
     async function loadRows() {
       setLoading(true);
       const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
-      if (custom) {
-        setCustomRows(custom);
-      } else {
-        setCustomRows(generateLensRows(powerType, compoundLimit, vision));
-      }
+      if (custom) setCustomRows(custom);
+      else setCustomRows(generateLensRows(powerType, compoundLimit, vision));
       setLoading(false);
     }
     loadRows();
@@ -77,12 +86,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         setSelectedShop(demoShops[0].id);
         return;
       }
-
       const { data } = await supabase.from('shops').select('*');
       if (data && data.length > 0) {
         setShops(data);
-
-        // ✅ Default Shop Mapping
         const { data: { user } } = await supabase.auth.getUser();
         const email = user?.email || '';
         setSelectedShop(getDefaultShopId(data, email));
@@ -104,31 +110,86 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     }
   };
 
+  // Custom entry add karo
+  const handleAddCustomEntry = () => {
+    const trimmedName = customName.trim();
+    const trimmedQty = customQty.trim();
+    if (!trimmedName) { customNameRef.current?.focus(); return; }
+    if (!trimmedQty) return;
+
+    setCustomEntries(prev => [
+      ...prev,
+      { id: Date.now().toString(), name: trimmedName, qty: trimmedQty }
+    ]);
+    setCustomName('');
+    setCustomQty('');
+    customNameRef.current?.focus();
+  };
+
+  const handleRemoveCustomEntry = (id: string) => {
+    setCustomEntries(prev => prev.filter(e => e.id !== id));
+  };
+
+  // qty string ko number mein convert karo (1/2 → 0.5, 1 1/2 → 1.5)
+  const parseQtyString = (qty: string): number => {
+    const trimmed = qty.trim();
+    // "1 1/2" or "1/2" or "2" type formats
+    const mixed = trimmed.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+    if (mixed) return parseInt(mixed[1]) + parseInt(mixed[2]) / parseInt(mixed[3]);
+    const fraction = trimmed.match(/^(\d+)\/(\d+)$/);
+    if (fraction) return parseInt(fraction[1]) / parseInt(fraction[2]);
+    const num = parseFloat(trimmed);
+    return isNaN(num) ? 0 : num;
+  };
+
   const saveOrder = async () => {
     if (isDemo) { alert('Demo Mode: Orders are not saved.'); return; }
-    const entries = Object.entries(deltas);
-    if (entries.length === 0) { alert('Please add items to order.'); return; }
+    const standardEntries = Object.entries(deltas);
+    if (standardEntries.length === 0 && customEntries.length === 0) {
+      alert('Please add items to order.');
+      return;
+    }
     setLoading(true);
     let successCount = 0;
     let lastError = null;
-    for (const [_, data] of entries) {
+
+    // Standard entries save karo
+    for (const [_, data] of standardEntries) {
       const { error } = await supabase.from('orders').insert({
         shop_id: selectedShop,
         lens_details: { name: data.name },
         quantity: data.qty
       });
       if (error) { console.error(error); lastError = error; }
-      else { successCount++; }
+      else successCount++;
     }
+
+    // Custom entries save karo
+    for (const entry of customEntries) {
+      const qty = parseQtyString(entry.qty);
+      const { error } = await supabase.from('orders').insert({
+        shop_id: selectedShop,
+        lens_details: { name: entry.name, is_custom: true },
+        quantity: qty > 0 ? qty : 0.5
+      });
+      if (error) { console.error(error); lastError = error; }
+      else successCount++;
+    }
+
     setLoading(false);
-    if (successCount > 0) { alert(`Orders saved successfully! (${successCount} items)`); setDeltas({}); }
-    else if (lastError) { alert('Failed to save orders. Error: ' + (lastError as any).message); }
+    if (successCount > 0) {
+      alert(`Orders saved successfully! (${successCount} items)`);
+      setDeltas({});
+      setCustomEntries([]);
+    } else if (lastError) {
+      alert('Failed to save orders. Error: ' + (lastError as any).message);
+    }
   };
 
   const toggleCoating = (c: string) => {
     if (c === 'Photo Grey') {
-      if (coatings.includes(c)) { setCoatings(coatings.filter(item => item !== c)); }
-      else { setCoatings([...coatings, c]); }
+      if (coatings.includes(c)) setCoatings(coatings.filter(item => item !== c));
+      else setCoatings([...coatings, c]);
     } else {
       const photoGreySelected = coatings.includes('Photo Grey');
       setCoatings(photoGreySelected ? ['Photo Grey', c] : [c]);
@@ -147,16 +208,52 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const generateOrderReport = async () => {
     setLoading(true);
     const today = new Date().toISOString().split('T')[0];
-    const { data: orders } = await supabase.from('orders').select('lens_details, quantity').gte('created_at', today);
-    if (!orders || orders.length === 0) { setLoading(false); alert('No orders found for today to generate report.'); return; }
-    const summary: Record<string, number> = {};
-    orders.forEach(o => { let name = o.lens_details.name; summary[name] = (summary[name] || 0) + Number(o.quantity); });
-    const items = Object.entries(summary).sort((a, b) => sortLensNames(a[0], b[0]));
+    const { data: orders } = await supabase
+      .from('orders')
+      .select('lens_details, quantity')
+      .gte('created_at', today);
+
+    if (!orders || orders.length === 0) {
+      setLoading(false);
+      alert('No orders found for today to generate report.');
+      return;
+    }
+
+    // Custom entries jo abhi save nahi hue unhe bhi report mein dikhao
+    const pendingCustom = customEntries.map(e => ({
+      lens_details: { name: e.name, is_custom: true },
+      quantity: parseQtyString(e.qty) || 0.5
+    }));
+
+    const allOrders = [...pendingCustom, ...orders];
+
+    // Custom orders pehle, phir standard sorted
+    const customItems: [string, number][] = [];
+    const standardSummary: Record<string, number> = {};
+
+    allOrders.forEach(o => {
+      const name = o.lens_details.name;
+      const qty = Number(o.quantity);
+      if (o.lens_details.is_custom) {
+        // Custom orders — as-is maintain karo, merge same names
+        const existing = customItems.find(c => c[0] === name);
+        if (existing) existing[1] += qty;
+        else customItems.push([name, qty]);
+      } else {
+        standardSummary[name] = (standardSummary[name] || 0) + qty;
+      }
+    });
+
+    const standardItems = Object.entries(standardSummary).sort((a, b) => sortLensNames(a[0], b[0]));
+    const items = [...customItems, ...standardItems];
+
     const dateStr = new Date().toLocaleDateString('en-GB');
     const MAX_ROWS_PER_COL = 40;
     const col1 = items.slice(0, MAX_ROWS_PER_COL);
     const col2 = items.slice(MAX_ROWS_PER_COL);
+
     setLoading(false);
+
     const win = window.open('', '_blank');
     if (win) {
       win.document.write(`
@@ -190,18 +287,14 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               <div class="header">DATE: ${dateStr}</div>
               <div class="columns">
                 <div class="column">
-                  <table>
-                    <tbody>
-                      ${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
-                    </tbody>
-                  </table>
+                  <table><tbody>
+                    ${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
+                  </tbody></table>
                 </div>
                 <div class="column">
-                  <table>
-                    <tbody>
-                      ${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
-                    </tbody>
-                  </table>
+                  <table><tbody>
+                    ${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
+                  </tbody></table>
                 </div>
               </div>
             </div>
@@ -209,17 +302,14 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               function downloadJPG() {
                 const btn = document.querySelector('button[onclick="downloadJPG()"]');
                 if (btn) { btn.disabled = true; btn.innerText = 'Generating...'; }
-                const a4Width = 794;
-                const a4Height = 1123;
+                const a4Width = 794; const a4Height = 1123;
                 html2canvas(document.querySelector("#capture"), {
                   scale: 2, width: a4Width, height: a4Height, windowWidth: a4Width, windowHeight: a4Height
                 }).then(canvas => {
                   const finalCanvas = document.createElement('canvas');
-                  finalCanvas.width = a4Width * 2;
-                  finalCanvas.height = a4Height * 2;
+                  finalCanvas.width = a4Width * 2; finalCanvas.height = a4Height * 2;
                   const ctx = finalCanvas.getContext('2d');
-                  ctx.fillStyle = 'white';
-                  ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+                  ctx.fillStyle = 'white'; ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
                   ctx.drawImage(canvas, 0, 0);
                   const link = document.createElement('a');
                   link.download = 'Order_${dateStr.replace(/\//g, '-')}.jpg';
@@ -241,11 +331,16 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Place Order</h1>
         <div className="flex gap-2">
-          <button onClick={generateOrderReport} className="bg-blue-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-blue-700 shadow-sm transition-colors"><FileText className="w-4 h-4 mr-1" /> Generate Order</button>
-          <button onClick={saveOrder} disabled={loading} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-green-700 disabled:opacity-50 shadow-sm transition-colors"><ShoppingCart className="w-4 h-4 mr-1" /> Save</button>
+          <button onClick={generateOrderReport} className="bg-blue-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-blue-700 shadow-sm transition-colors">
+            <FileText className="w-4 h-4 mr-1" /> Generate Order
+          </button>
+          <button onClick={saveOrder} disabled={loading} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-green-700 disabled:opacity-50 shadow-sm transition-colors">
+            <ShoppingCart className="w-4 h-4 mr-1" /> Save
+          </button>
         </div>
       </div>
 
+      {/* Filter Controls */}
       <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm space-y-3 border border-gray-200 dark:border-gray-700">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
@@ -315,6 +410,65 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         </div>
       </div>
 
+      {/* ✅ Custom Order Entry Section */}
+      <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-700/50 rounded-lg shadow-sm overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-700/50 bg-amber-100/60 dark:bg-amber-900/20">
+          <h3 className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider">Custom Order</h3>
+        </div>
+
+        {/* Input row */}
+        <div className="p-3 flex flex-col sm:flex-row gap-2">
+          <input
+            ref={customNameRef}
+            type="text"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomEntry(); }}
+            placeholder="Lens power / description (e.g. -0.50/-2.50 CYL BLUECUT POLY)"
+            className="flex-1 text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-amber-300 dark:border-amber-700 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400 dark:focus:ring-amber-600 placeholder:text-gray-400 transition-all"
+          />
+          <input
+            type="text"
+            value={customQty}
+            onChange={(e) => setCustomQty(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomEntry(); }}
+            placeholder="Qty (e.g. 1, 1/2, 1 1/2)"
+            className="w-full sm:w-36 text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-amber-300 dark:border-amber-700 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400 dark:focus:ring-amber-600 placeholder:text-gray-400 transition-all"
+          />
+          <button
+            onClick={handleAddCustomEntry}
+            className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-4 py-2 rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add
+          </button>
+        </div>
+
+        {/* Added custom entries list */}
+        {customEntries.length > 0 && (
+          <div className="border-t border-amber-200 dark:border-amber-700/50">
+            <table className="w-full">
+              <tbody>
+                {customEntries.map((entry) => (
+                  <tr key={entry.id} className="border-b border-amber-100 dark:border-amber-800/30 last:border-b-0 even:bg-amber-50/50 dark:even:bg-amber-900/10">
+                    <td className="px-4 py-2 text-xs font-medium text-gray-800 dark:text-gray-200">{entry.name}</td>
+                    <td className="px-4 py-2 text-center text-xs font-bold text-amber-700 dark:text-amber-400 w-20">{entry.qty}</td>
+                    <td className="px-3 py-2 text-right w-12">
+                      <button
+                        onClick={() => handleRemoveCustomEntry(entry.id)}
+                        className="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Standard Lens Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
         <div className="overflow-x-auto">
           <table className="w-full md:w-auto divide-y divide-gray-200 dark:divide-gray-700">
@@ -361,4 +515,15 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       </div>
     </div>
   );
+
+  function handleAddCustomEntry() {
+    const trimmedName = customName.trim();
+    const trimmedQty = customQty.trim();
+    if (!trimmedName) { customNameRef.current?.focus(); return; }
+    if (!trimmedQty) return;
+    setCustomEntries(prev => [...prev, { id: Date.now().toString(), name: trimmedName, qty: trimmedQty }]);
+    setCustomName('');
+    setCustomQty('');
+    customNameRef.current?.focus();
+  }
 }

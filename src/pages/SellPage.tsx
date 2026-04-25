@@ -307,8 +307,8 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
                         </select>
                       </td>
                     )}
-                    <td className="px-1 py-1.5 whitespace-nowrap text-[10px] text-center text-gray-400 dark:text-gray-500">{origQty.toFixed(2)}</td>
-                    <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${sellQty === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-red-600 dark:text-red-400'}`}>
+                    <td className="px-1 py-1.5 whitespace-nowrap text-sm font-bold text-center text-gray-600 dark:text-gray-300">{origQty.toFixed(2)}</td>
+                    <td className={`px-1 py-1.5 whitespace-nowrap text-sm text-center font-extrabold ${sellQty === 0 ? 'text-gray-400 dark:text-gray-500' : 'text-red-600 dark:text-red-400'}`}>
                       {sellQty > 0 ? `-${sellQty.toFixed(2)}` : sellQty.toFixed(2)}
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-right">

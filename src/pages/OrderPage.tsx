@@ -25,7 +25,7 @@ import { Plus, Minus, ShoppingCart, FileText, Trash2 } from 'lucide-react';
 interface CustomOrderEntry {
   id: string;
   name: string;
-  qty: string; // store as string jaise user ne likha
+  qty: string;
 }
 
 export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
@@ -44,7 +44,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [customRows, setCustomRows] = useState<CustomLensRow[]>([]);
 
-  // Custom order entries
   const [customEntries, setCustomEntries] = useState<CustomOrderEntry[]>([]);
   const [customName, setCustomName] = useState('');
   const [customQty, setCustomQty] = useState('');
@@ -110,13 +109,11 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     }
   };
 
-  // Custom entry add karo
   const handleAddCustomEntry = () => {
     const trimmedName = customName.trim();
     const trimmedQty = customQty.trim();
     if (!trimmedName) { customNameRef.current?.focus(); return; }
     if (!trimmedQty) return;
-
     setCustomEntries(prev => [
       ...prev,
       { id: Date.now().toString(), name: trimmedName, qty: trimmedQty }
@@ -130,10 +127,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     setCustomEntries(prev => prev.filter(e => e.id !== id));
   };
 
-  // qty string ko number mein convert karo (1/2 → 0.5, 1 1/2 → 1.5)
   const parseQtyString = (qty: string): number => {
     const trimmed = qty.trim();
-    // "1 1/2" or "1/2" or "2" type formats
     const mixed = trimmed.match(/^(\d+)\s+(\d+)\/(\d+)$/);
     if (mixed) return parseInt(mixed[1]) + parseInt(mixed[2]) / parseInt(mixed[3]);
     const fraction = trimmed.match(/^(\d+)\/(\d+)$/);
@@ -153,7 +148,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     let successCount = 0;
     let lastError = null;
 
-    // Standard entries save karo
     for (const [_, data] of standardEntries) {
       const { error } = await supabase.from('orders').insert({
         shop_id: selectedShop,
@@ -164,7 +158,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       else successCount++;
     }
 
-    // Custom entries save karo
     for (const entry of customEntries) {
       const qty = parseQtyString(entry.qty);
       const { error } = await supabase.from('orders').insert({
@@ -219,7 +212,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       return;
     }
 
-    // Custom entries jo abhi save nahi hue unhe bhi report mein dikhao
     const pendingCustom = customEntries.map(e => ({
       lens_details: { name: e.name, is_custom: true },
       quantity: parseQtyString(e.qty) || 0.5
@@ -227,7 +219,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
     const allOrders = [...pendingCustom, ...orders];
 
-    // Custom orders pehle, phir standard sorted
     const customItems: [string, number][] = [];
     const standardSummary: Record<string, number> = {};
 
@@ -235,7 +226,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       const name = o.lens_details.name;
       const qty = Number(o.quantity);
       if (o.lens_details.is_custom) {
-        // Custom orders — as-is maintain karo, merge same names
         const existing = customItems.find(c => c[0] === name);
         if (existing) existing[1] += qty;
         else customItems.push([name, qty]);
@@ -410,13 +400,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         </div>
       </div>
 
-      {/* ✅ Custom Order Entry Section */}
+      {/* Custom Order Entry Section */}
       <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-700/50 rounded-lg shadow-sm overflow-hidden">
         <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-700/50 bg-amber-100/60 dark:bg-amber-900/20">
           <h3 className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider">Custom Order</h3>
         </div>
 
-        {/* Input row */}
         <div className="p-3 flex flex-col sm:flex-row gap-2">
           <input
             ref={customNameRef}
@@ -443,7 +432,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           </button>
         </div>
 
-        {/* Added custom entries list */}
         {customEntries.length > 0 && (
           <div className="border-t border-amber-200 dark:border-amber-700/50">
             <table className="w-full">
@@ -515,15 +503,4 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       </div>
     </div>
   );
-
-  function handleAddCustomEntry() {
-    const trimmedName = customName.trim();
-    const trimmedQty = customQty.trim();
-    if (!trimmedName) { customNameRef.current?.focus(); return; }
-    if (!trimmedQty) return;
-    setCustomEntries(prev => [...prev, { id: Date.now().toString(), name: trimmedName, qty: trimmedQty }]);
-    setCustomName('');
-    setCustomQty('');
-    customNameRef.current?.focus();
-  }
 }

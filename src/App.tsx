@@ -55,38 +55,38 @@ function App() {
           <p>Supabase is not configured. Data will not persist and shop data is mocked.</p>
         </div>
       )}
-      <nav className="bg-white dark:bg-gray-800 lg:bg-slate-900 lg:dark:bg-slate-950 shadow-lg border-b border-gray-200 dark:border-gray-700 lg:border-indigo-500/30 sticky top-0 z-50 transition-all duration-300">
+      <nav className="bg-white dark:bg-gray-800 lg:bg-slate-900 lg:dark:bg-slate-950 shadow-lg border-b border-gray-200 dark:border-gray-700 lg:border-amber-500/30 sticky top-0 z-50 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <Link to="/" className="flex-shrink-0 flex items-center group">
-                <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400 lg:text-indigo-400 lg:font-black lg:tracking-tight transition-all">LensLedger</span>
+                <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400 lg:text-amber-500 lg:font-black lg:tracking-tight transition-all">LensLedger</span>
               </Link>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                 <Link
                   to="/"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/' ? 'border-indigo-500 text-gray-900 dark:text-white lg:text-indigo-400 lg:border-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:text-slate-400 lg:hover:text-white'}`}
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/' ? 'border-indigo-500 text-gray-900 dark:text-white lg:text-amber-400 lg:border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:text-amber-600/70 lg:hover:text-amber-400'}`}
                 >
                   <LayoutDashboard className="w-4 h-4 mr-2" />
                   Dashboard
                 </Link>
                 <Link
                   to="/stock"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/stock' ? 'border-indigo-500 text-gray-900 dark:text-white lg:text-indigo-400 lg:border-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:text-slate-400 lg:hover:text-white'}`}
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/stock' ? 'border-indigo-500 text-gray-900 dark:text-white lg:text-amber-400 lg:border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:text-amber-600/70 lg:hover:text-amber-400'}`}
                 >
                   <Package className="w-4 h-4 mr-2" />
                   Stock
                 </Link>
                 <Link
                   to="/order"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/order' ? 'border-indigo-500 text-gray-900 dark:text-white lg:text-indigo-400 lg:border-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:text-slate-400 lg:hover:text-white'}`}
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/order' ? 'border-indigo-500 text-gray-900 dark:text-white lg:text-amber-400 lg:border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:text-amber-600/70 lg:hover:text-amber-400'}`}
                 >
                   <ShoppingCart className="w-4 h-4 mr-2" />
                   Orders
                 </Link>
                 <Link
                   to="/sell"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/sell' ? 'border-indigo-500 text-gray-900 dark:text-white lg:text-indigo-400 lg:border-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:text-slate-400 lg:hover:text-white'}`}
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/sell' ? 'border-indigo-500 text-gray-900 dark:text-white lg:text-amber-400 lg:border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:text-amber-600/70 lg:hover:text-amber-400'}`}
                 >
                   <Tag className="w-4 h-4 mr-2" />
                   Sell
@@ -95,13 +95,13 @@ function App() {
             </div>
             <div className="flex items-center space-x-2 sm:space-x-4">
               <div className="flex flex-col items-end mr-1 sm:mr-2">
-                <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 lg:text-indigo-300/70 lg:font-bold truncate max-w-[120px] sm:max-w-none">
+                <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 lg:text-amber-600/60 lg:font-bold truncate max-w-[120px] sm:max-w-none">
                   {session?.user?.email}
                 </span>
               </div>
               <button
                 onClick={() => isConfigured ? supabase.auth.signOut() : setSession(null)}
-                className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 border border-transparent text-[10px] sm:text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 lg:bg-indigo-500 lg:hover:bg-indigo-400 lg:text-slate-900 lg:font-bold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all"
+                className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 border border-transparent text-[10px] sm:text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 lg:bg-amber-600 lg:hover:bg-amber-500 lg:text-slate-950 lg:font-bold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all"
               >
                 <LogOut className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
                 <span className="hidden xs:inline">Sign Out</span>

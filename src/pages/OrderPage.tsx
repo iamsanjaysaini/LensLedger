@@ -361,7 +361,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                   ctx.fillStyle = 'white'; ctx.fillRect(0, 0, A4_W, A4_H);
                   ctx.drawImage(canvas, 0, 0, A4_W, A4_H);
                   const rawDataUrl = finalCanvas.toDataURL('image/jpeg', 0.95);
-                  const dpiDataUrl = setJpegDPI(rawDataUrl, 300);
+                  const dpiDataUrl = setJpegDPI(rawDataUrl, 100);
                   const link = document.createElement('a');
                   link.download = 'Order_${dateStr.replace(/\//g, '-')}.jpg';
                   link.href = dpiDataUrl; link.click();

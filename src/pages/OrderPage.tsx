@@ -343,7 +343,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               function downloadJPG() {
                 const btn = event.target;
                 btn.disabled = true; btn.innerText = 'Generating...';
-                const A4_W = 2480; const A4_H = 3508;
+                const A4_W = 595; const A4_H = 842;
                 html2canvas(document.querySelector('#capture'), {
                   scale: 4,
                   useCORS: true,
@@ -361,7 +361,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                   ctx.fillStyle = 'white'; ctx.fillRect(0, 0, A4_W, A4_H);
                   ctx.drawImage(canvas, 0, 0, A4_W, A4_H);
                   const rawDataUrl = finalCanvas.toDataURL('image/jpeg', 0.95);
-                  const dpiDataUrl = setJpegDPI(rawDataUrl, 100);
+                  const dpiDataUrl = setJpegDPI(rawDataUrl, 72);
                   const link = document.createElement('a');
                   link.download = 'Order_${dateStr.replace(/\//g, '-')}.jpg';
                   link.href = dpiDataUrl; link.click();

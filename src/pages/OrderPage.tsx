@@ -260,7 +260,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         <html>
           <head>
             <title>Order Report - ${dateStr}</title>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
             <style>
               * { box-sizing: border-box; margin: 0; padding: 0; }
               body { font-family: 'Courier New', Courier, monospace; font-size: 11pt; background: #e5e7eb; }
@@ -270,7 +270,14 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               .btn.secondary { background: #0891b2; }
               .btn.secondary:hover { background: #0e7490; }
               .page-wrapper { display: flex; justify-content: center; padding: 24px 16px 48px; }
-              .page-container { background: white; width: 210mm; min-height: 297mm; padding: 15mm 12mm 15mm 12mm; box-shadow: 0 4px 24px rgba(0,0,0,0.18); }
+              .page-container {
+                background: white;
+                width: 210mm;
+                height: 297mm;
+                padding: 15mm 12mm 15mm 12mm;
+                box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+                overflow: hidden;
+              }
               .header { border-bottom: 2.5px solid black; padding-bottom: 8px; margin-bottom: 14px; text-align: center; font-weight: bold; font-size: 15pt; letter-spacing: 1px; }
               .columns { display: flex; gap: 8mm; align-items: flex-start; }
               .column { flex: 1; }
@@ -278,12 +285,18 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               td { border: 0.5px solid #aaa; padding: 3.5px 6px; text-align: left; font-size: 9.5pt; line-height: 1.3; }
               .qty-col { width: 32px; text-align: center; font-weight: bold; }
               @media print {
-                @page { size: A4 portrait; margin: 15mm 12mm; }
+                @page { size: A4 portrait; margin: 0; }
                 * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                 body { background: white; }
                 .controls { display: none !important; }
                 .page-wrapper { padding: 0; }
-                .page-container { width: 100%; min-height: auto; padding: 0; box-shadow: none; }
+                .page-container {
+                  width: 210mm;
+                  height: 297mm;
+                  padding: 15mm 12mm;
+                  box-shadow: none;
+                  overflow: hidden;
+                }
                 .header { font-size: 14pt; }
                 td { font-size: 9pt; padding: 3px 5px; }
               }
@@ -331,7 +344,16 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                 const btn = event.target;
                 btn.disabled = true; btn.innerText = 'Generating...';
                 const A4_W = 2480; const A4_H = 3508;
-                html2canvas(document.querySelector('#capture'), { scale: 4, useCORS: true, width: 794, height: 1123, windowWidth: 794, windowHeight: 1123, scrollX: 0, scrollY: 0 }).then(canvas => {
+                html2canvas(document.querySelector('#capture'), {
+                  scale: 4,
+                  useCORS: true,
+                  width: 794,
+                  height: 1123,
+                  windowWidth: 794,
+                  windowHeight: 1123,
+                  scrollX: 0,
+                  scrollY: 0
+                }).then(canvas => {
                   const finalCanvas = document.createElement('canvas');
                   finalCanvas.width = A4_W; finalCanvas.height = A4_H;
                   const ctx = finalCanvas.getContext('2d');
@@ -346,7 +368,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                   btn.disabled = false; btn.innerText = '📥 Download JPG';
                 });
               }
-            </script>
+            <\/script>
           </body>
         </html>
       `);

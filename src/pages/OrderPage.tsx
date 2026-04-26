@@ -313,7 +313,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                   overflow: hidden;
                 }
                 .header { font-size: 14pt; }
-                td { font-size: 12pt; font-weight: bold; padding: 3px 5px; }
+                td { font-size: 14pt; font-weight: bold; padding: 3px 5px; }
               }
             </style>
           </head>

@@ -28,7 +28,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   const [coatings, setCoatings] = useState<string[]>(['HC']);
   const [sign, setSign] = useState<Sign>('-');
   const [powerType, setPowerType] = useState<PowerType>('SPH');
-  const [compoundLimit, setCompoundLimit] = useState('2.0');
+  const compoundLimit = '2.0';
   const [rowAxes, setRowAxes] = useState<Record<string, number>>({});
   const [customCoating, setCustomCoating] = useState('');
   const [availableCoatings, setAvailableCoatings] = useState(DEFAULT_COATINGS);
@@ -257,15 +257,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
               <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
             </div>
           </div>
-          {(powerType === 'Compound' || powerType === 'Cross Compound') && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Range</label>
-              <div className="flex gap-1.5 mt-1">
-                <button onClick={() => setCompoundLimit('2.0')} className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '2.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>upto 2.0 cyl</button>
-                <button onClick={() => setCompoundLimit('4.0')} className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '4.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>upto 4 cyl</button>
-              </div>
-            </div>
-          )}
         </div>
 
         <div>

@@ -295,7 +295,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               .column { flex: 1; }
               table { width: 100%; border-collapse: collapse; }
               td { border: 0.5px solid #aaa; padding: 3.5px 6px; text-align: left; font-size: 12pt; font-weight: bold; line-height: 1.3; }
-              .qty-col { width: 38px; text-align: center; font-weight: bold; }
+              .qty-col { width: 38px; text-align: center; font-weight: bold; font-size: 14pt; }
               .frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; line-height: 1.1; margin: 0 1px; font-size: 0.82em; }
               .frac sup, .frac sub { display: block; line-height: 1.1; font-size: inherit; }
               .frac span { display: block; border-top: 1.5px solid black; width: 100%; }
@@ -313,7 +313,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                   overflow: hidden;
                 }
                 .header { font-size: 14pt; }
-                td { font-size: 14pt; font-weight: bold; padding: 3px 5px; }
+                td { font-size: 12pt; font-weight: bold; padding: 3px 5px; }
               }
             </style>
           </head>

@@ -15,7 +15,7 @@ import {
   PROGRESSIVE_AXIS,
   Shop
 } from '../utils/lensUtils';
-import { Plus, Minus, Save, Edit2, Check, X, Trash2, ChevronUp, ChevronDown, BellOff, Bell } from 'lucide-react';
+import { Plus, Minus, Save, Edit2, Check, X, Trash2, ChevronUp, ChevronDown, BellOff, Bell, Database } from 'lucide-react';
 import { fetchCustomLensRows, saveCustomLensRows, CustomLensRow } from '../utils/lensUtils';
 
 export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
@@ -37,6 +37,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [customRows, setCustomRows] = useState<CustomLensRow[]>([]);
   const [newRowPower, setNewRowPower] = useState({ sph: '', cyl: '', add: '' });
   const [insertAt, setInsertAt] = useState<number | null>(null);
+  const [syncLoading, setSyncLoading] = useState(false);
 
   // Alert ignore state
   const [isIgnored, setIsIgnored] = useState(false);
@@ -119,7 +120,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     setIgnoreLoading(true);
     try {
       if (isIgnored) {
-        // Remove ignore
         await supabase
           .from('alert_ignores')
           .delete()
@@ -131,7 +131,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
           .filter('coatings', 'eq', `{${coatings.join(',')}}`);
         setIsIgnored(false);
       } else {
-        // Add ignore
         await supabase
           .from('alert_ignores')
           .insert({
@@ -192,6 +191,57 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       setLoading(false);
     }
   }
+
+  // ── NEW: Sync List to DB ──────────────────────────────────────
+  const syncListToDB = async () => {
+    if (isDemo) { alert('Demo Mode: Sync is not available.'); return; }
+    if (!selectedShop) { alert('Please select a shop first.'); return; }
+    if (lensRows.length === 0) { alert('No rows to sync.'); return; }
+
+    const confirm = window.confirm(
+      `Yeh ${lensRows.length} lenses ko quantity=0 ke saath DB mein add karega (jo pehle se hain unhe touch nahi karega).\n\nProceed?`
+    );
+    if (!confirm) return;
+
+    setSyncLoading(true);
+    let insertedCount = 0;
+    let skippedCount = 0;
+
+    for (const row of lensRows) {
+      const rowKey = `${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}::${row.add || ''}`;
+      // Agar already DB mein hai toh skip
+      const alreadyExists = originalStock[`${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}::${row.add || ''}`] !== undefined;
+
+      const { error } = await supabase.from('lens_stock').upsert({
+        shop_id: selectedShop,
+        material,
+        vision,
+        sign,
+        power_type: powerType,
+        sph: parseFloat(row.sph),
+        cyl: parseFloat(row.cyl),
+        axis: null,
+        addition: row.add ? parseFloat(row.add) : null,
+        coatings,
+        quantity: alreadyExists ? originalStock[`${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}::${row.add || ''}`] : 0
+      }, {
+        onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings',
+        ignoreDuplicates: true
+      });
+
+      if (error) {
+        console.error('Sync error:', error);
+        skippedCount++;
+      } else {
+        if (alreadyExists) skippedCount++;
+        else insertedCount++;
+      }
+    }
+
+    setSyncLoading(false);
+    await fetchStock();
+    alert(`Sync complete!\n✅ Inserted: ${insertedCount}\n⏭ Already existed (skipped): ${skippedCount}`);
+  };
 
   const handleQuantityChange = (sph: string, cyl: string, axis: number | undefined, add: string | undefined, delta: number) => {
     const key = `${parseFloat(sph).toFixed(2)}:${parseFloat(cyl).toFixed(2)}:${axis || ''}:${add || ''}`;
@@ -384,6 +434,19 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         <div className="flex gap-2">
           {!isEditMode ? (
             <>
+              {/* Sync List to DB Button */}
+              {!isDemo && (
+                <button
+                  onClick={syncListToDB}
+                  disabled={syncLoading}
+                  title="Current list ke saare lenses quantity=0 ke saath DB mein add karo (existing records safe rahenge)"
+                  className="px-2 py-1.5 rounded-md flex items-center text-[10px] sm:text-xs transition-colors border bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/40 disabled:opacity-50"
+                >
+                  <Database className="w-3.5 h-3.5 mr-1" />
+                  {syncLoading ? 'Syncing...' : 'Sync List'}
+                </button>
+              )}
+
               {/* Ignore for Alert Button */}
               {!isDemo && (
                 <button

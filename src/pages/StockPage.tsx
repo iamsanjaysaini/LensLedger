@@ -13,13 +13,10 @@ import {
   Sign,
   KT_AXIS,
   PROGRESSIVE_AXIS,
-  Shop,
-  getDefaultShopId,
-  fetchCustomLensRows,
-  saveCustomLensRows,
-  CustomLensRow
+  Shop
 } from '../utils/lensUtils';
-import { Plus, Minus, Save, Edit2, Check, X, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Minus, Save, Edit2, Check, X, Trash2, ChevronUp, ChevronDown, BellOff, Bell } from 'lucide-react';
+import { fetchCustomLensRows, saveCustomLensRows, CustomLensRow } from '../utils/lensUtils';
 
 export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -40,6 +37,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [customRows, setCustomRows] = useState<CustomLensRow[]>([]);
   const [newRowPower, setNewRowPower] = useState({ sph: '', cyl: '', add: '' });
   const [insertAt, setInsertAt] = useState<number | null>(null);
+
+  // Alert ignore state
+  const [isIgnored, setIsIgnored] = useState(false);
+  const [ignoreLoading, setIgnoreLoading] = useState(false);
 
   useEffect(() => {
     async function loadRows() {
@@ -81,15 +82,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         setSelectedShop(demoShops[0].id);
         return;
       }
-
       const { data } = await supabase.from('shops').select('*');
       if (data && data.length > 0) {
         setShops(data);
-
-        // ✅ Default Shop Mapping
-        const { data: { user } } = await supabase.auth.getUser();
-        const email = user?.email || '';
-        setSelectedShop(getDefaultShopId(data, email));
+        setSelectedShop(data[0].id);
       }
     }
     fetchShops();
@@ -98,9 +94,62 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     if (selectedShop && !isDemo) {
       fetchStock();
+      fetchIgnoreStatus();
     }
     setDeltas({});
   }, [selectedShop, material, vision, coatings, sign, powerType, compoundLimit, isDemo]);
+
+  async function fetchIgnoreStatus() {
+    if (!selectedShop || isDemo) return;
+    const { data } = await supabase
+      .from('alert_ignores')
+      .select('id')
+      .eq('shop_id', selectedShop)
+      .eq('material', material)
+      .eq('vision', vision)
+      .eq('sign', sign)
+      .eq('power_type', powerType)
+      .filter('coatings', 'eq', `{${coatings.join(',')}}`);
+
+    setIsIgnored(!!(data && data.length > 0));
+  }
+
+  async function toggleIgnore() {
+    if (!selectedShop || isDemo) return;
+    setIgnoreLoading(true);
+    try {
+      if (isIgnored) {
+        // Remove ignore
+        await supabase
+          .from('alert_ignores')
+          .delete()
+          .eq('shop_id', selectedShop)
+          .eq('material', material)
+          .eq('vision', vision)
+          .eq('sign', sign)
+          .eq('power_type', powerType)
+          .filter('coatings', 'eq', `{${coatings.join(',')}}`);
+        setIsIgnored(false);
+      } else {
+        // Add ignore
+        await supabase
+          .from('alert_ignores')
+          .insert({
+            shop_id: selectedShop,
+            material,
+            vision,
+            sign,
+            power_type: powerType,
+            coatings,
+          });
+        setIsIgnored(true);
+      }
+    } catch (e) {
+      console.error('Toggle ignore error:', e);
+    } finally {
+      setIgnoreLoading(false);
+    }
+  }
 
   async function fetchStock() {
     setLoading(true);
@@ -121,11 +170,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       } else if (powerType === 'CYL') {
         query = query.gt('cyl', 0).lte('cyl', 6.0);
       } else {
-        if (compoundLimit === '2.0') {
-          query = query.gte('cyl', 0.25).lte('cyl', 2.0);
-        } else {
-          query = query.gte('cyl', 2.25).lte('cyl', 4.0);
-        }
+        query = query.gte('cyl', 0.25).lte('cyl', 2.0);
       }
 
       const { data, error } = await query;
@@ -330,6 +375,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     setInsertAt(null);
   };
 
+  const currentShopName = shops.find(s => s.id === selectedShop)?.name || '';
+
   return (
     <div className="space-y-4 pb-20">
       <div className="sticky top-16 z-40 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm -mx-4 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shadow-sm">
@@ -337,6 +384,25 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         <div className="flex gap-2">
           {!isEditMode ? (
             <>
+              {/* Ignore for Alert Button */}
+              {!isDemo && (
+                <button
+                  onClick={toggleIgnore}
+                  disabled={ignoreLoading}
+                  title={isIgnored ? `Resume alerts for this category (${currentShopName})` : `Ignore alerts for this category (${currentShopName})`}
+                  className={`px-2 py-1.5 rounded-md flex items-center text-[10px] sm:text-xs transition-colors border disabled:opacity-50 ${
+                    isIgnored
+                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:bg-gray-300 dark:hover:bg-gray-600'
+                      : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {isIgnored ? (
+                    <><BellOff className="w-3.5 h-3.5 mr-1 text-gray-400" /> Ignored</>
+                  ) : (
+                    <><Bell className="w-3.5 h-3.5 mr-1" /> Ignore Alert</>
+                  )}
+                </button>
+              )}
               <button onClick={handleEditToggle} className="bg-indigo-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-indigo-700 text-[10px] sm:text-xs transition-colors">
                 <Edit2 className="w-3.5 h-3.5 mr-1" /> Edit List
               </button>
@@ -356,6 +422,17 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
           )}
         </div>
       </div>
+
+      {/* Ignore status banner */}
+      {isIgnored && !isDemo && (
+        <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-[10px] text-gray-500 dark:text-gray-400">
+          <BellOff className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          <span>
+            Low stock alerts are <strong>ignored</strong> for this category on <strong>{currentShopName}</strong>.
+            Click "Ignored" button above to resume alerts.
+          </span>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm space-y-3 border border-gray-200 dark:border-gray-700">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -419,7 +496,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
         <div className="overflow-x-auto">
-          <table className="w-full md:w-auto divide-y divide-gray-200 dark:divide-gray-700">
+          <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800/80 text-center">
               <tr>
                 {isEditMode && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Move</th>}
@@ -439,6 +516,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 const delta = deltas[key] || 0;
                 const origQty = originalStock[key] || 0;
                 const isInsertMode = insertAt === index;
+                const isLowStock = !isIgnored && origQty < 1;
 
                 return (
                   <React.Fragment key={rowKey}>
@@ -464,7 +542,11 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                       onMouseLeave={(e) => { if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer); }}
                       onTouchStart={(e) => { if (isEditMode) { const timer = setTimeout(() => initiateInsert(index), 700); (e.currentTarget as any)._holdTimer = timer; } }}
                       onTouchEnd={(e) => { if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer); }}
-                      className={`hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50 ${isEditMode ? 'cursor-pointer select-none' : ''}`}
+                      className={`transition-colors ${isEditMode ? 'cursor-pointer select-none' : ''} ${
+                        isLowStock
+                          ? 'bg-orange-50 dark:bg-orange-900/15 hover:bg-orange-100/60 dark:hover:bg-orange-900/25'
+                          : 'hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 even:bg-gray-100 dark:even:bg-gray-700/50'
+                      }`}
                     >
                       {isEditMode && (
                         <td className="px-1 py-1.5 text-center">
@@ -480,6 +562,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                       )}
                       <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300 select-none">
                         {isEditMode && <span className="mr-2 text-gray-400">☰</span>}
+                        {isLowStock && <span className="mr-1.5 text-orange-400">⚠</span>}
                         {name}
                       </td>
                       {powerType !== 'SPH' && (
@@ -490,8 +573,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                           </select>
                         </td>
                       )}
-                      <td className="px-1 py-1.5 whitespace-nowrap text-sm font-bold text-center text-gray-600 dark:text-gray-300">{origQty.toFixed(2)}</td>
-                      <td className={`px-1 py-1.5 whitespace-nowrap text-sm text-center font-extrabold ${delta === 0 ? 'text-gray-400 dark:text-gray-500' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                      <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${isLowStock ? 'text-orange-500 dark:text-orange-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                        {origQty.toFixed(2)}
+                      </td>
+                      <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${delta === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-indigo-600 dark:text-indigo-400'}`}>
                         {delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}
                       </td>
                       <td className="px-2 py-1.5 whitespace-nowrap text-right">

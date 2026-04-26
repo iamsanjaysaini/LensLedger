@@ -18,7 +18,9 @@ import {
   Shop,
   getDefaultShopId
 } from '../utils/lensUtils';
-import { Plus, Tag } from 'lucide-react';
+import { Plus, Tag, X } from 'lucide-react';
+
+const NON_DELETABLE_COATINGS = ['HC', 'Bluecut green'];
 
 export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -43,11 +45,8 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     async function loadRows() {
       setLoading(true);
       const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
-      if (custom) {
-        setCustomRows(custom);
-      } else {
-        setCustomRows(generateLensRows(powerType, compoundLimit, vision));
-      }
+      if (custom) setCustomRows(custom);
+      else setCustomRows(generateLensRows(powerType, compoundLimit, vision));
       setLoading(false);
     }
     loadRows();
@@ -71,20 +70,14 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function fetchShops() {
       if (isDemo) {
-        const demoShops = [
-          { id: '1', name: 'SS Opticals' },
-          { id: '2', name: 'Narbada Eye Care' }
-        ];
+        const demoShops = [{ id: '1', name: 'SS Opticals' }, { id: '2', name: 'Narbada Eye Care' }];
         setShops(demoShops);
         setSelectedShop(demoShops[0].id);
         return;
       }
-
       const { data } = await supabase.from('shops').select('*');
       if (data && data.length > 0) {
         setShops(data);
-
-        // ✅ Default Shop Mapping
         const { data: { user } } = await supabase.auth.getUser();
         const email = user?.email || '';
         setSelectedShop(getDefaultShopId(data, email));
@@ -94,41 +87,20 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   }, [isDemo]);
 
   useEffect(() => {
-    if (selectedShop && !isDemo) {
-      fetchStock();
-    }
+    if (selectedShop && !isDemo) fetchStock();
     setDeltas({});
   }, [selectedShop, material, vision, coatings, sign, powerType, compoundLimit, isDemo]);
 
   async function fetchStock() {
     setLoading(true);
     try {
-      let query = supabase
-        .from('lens_stock')
-        .select('*')
-        .eq('shop_id', selectedShop)
-        .eq('material', material)
-        .eq('vision', vision)
-        .eq('sign', sign)
-        .eq('power_type', powerType);
-
+      let query = supabase.from('lens_stock').select('*').eq('shop_id', selectedShop).eq('material', material).eq('vision', vision).eq('sign', sign).eq('power_type', powerType);
       query = query.eq('coatings', `{${coatings.join(',')}}`);
-
-      if (powerType === 'SPH') {
-        query = query.eq('cyl', 0);
-      } else if (powerType === 'CYL') {
-        query = query.gt('cyl', 0).lte('cyl', 6.0);
-      } else {
-        if (compoundLimit === '2.0') {
-          query = query.gte('cyl', 0.25).lte('cyl', 2.0);
-        } else {
-          query = query.gte('cyl', 2.25).lte('cyl', 4.0);
-        }
-      }
-
+      if (powerType === 'SPH') query = query.eq('cyl', 0);
+      else if (powerType === 'CYL') query = query.gt('cyl', 0).lte('cyl', 6.0);
+      else { if (compoundLimit === '2.0') query = query.gte('cyl', 0.25).lte('cyl', 2.0); else query = query.gte('cyl', 2.25).lte('cyl', 4.0); }
       const { data, error } = await query;
       if (error) throw error;
-
       const stockMap: Record<string, number> = {};
       if (data) {
         data.forEach((item) => {
@@ -139,11 +111,8 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
         });
       }
       setOriginalStock(stockMap);
-    } catch (error) {
-      console.error("Fetch error:", error);
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { console.error("Fetch error:", error); }
+    finally { setLoading(false); }
   }
 
   const handleQuantityChange = (sph: string, cyl: string, name: string, delta: number, axis?: number, add?: string) => {
@@ -151,22 +120,19 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     const current = deltas[key] || { qty: 0, name };
     const newQty = Math.max(0, current.qty + delta);
     if (newQty === 0) { const newDeltas = { ...deltas }; delete newDeltas[key]; setDeltas(newDeltas); }
-    else { setDeltas({ ...deltas, [key]: { qty: newQty, name } }); }
+    else setDeltas({ ...deltas, [key]: { qty: newQty, name } });
   };
 
   const saveSale = async () => {
     if (isDemo) { alert('Demo Mode: Sales are not saved to the database.'); return; }
     const entries = Object.entries(deltas);
     if (entries.length === 0) { alert('Please add items to sell.'); return; }
-
     setLoading(true);
     let successCount = 0;
     let lastError = null;
-
     for (const [key, data] of entries) {
       const [sphStr, cylStr, axisStr, addStr] = key.split(':');
       const currentStock = originalStock[key] || 0;
-
       const { error: stockError } = await supabase.from('lens_stock').upsert({
         shop_id: selectedShop, material, vision, sign, power_type: powerType,
         sph: parseFloat(sphStr), cyl: parseFloat(cylStr),
@@ -174,33 +140,33 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
         addition: addStr ? parseFloat(addStr) : null,
         coatings, quantity: Math.max(0, currentStock - data.qty)
       }, { onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings' });
-
       if (stockError) { console.error("Stock update error:", stockError); lastError = stockError; continue; }
-
-      const { error: saleError } = await supabase.from('sales').insert({
-        shop_id: selectedShop,
-        lens_details: { name: data.name },
-        quantity: data.qty
-      });
-
+      const { error: saleError } = await supabase.from('sales').insert({ shop_id: selectedShop, lens_details: { name: data.name }, quantity: data.qty });
       if (saleError) { console.error("Sale record error:", saleError); lastError = saleError; }
-      else { successCount++; }
+      else successCount++;
     }
-
     setLoading(false);
     if (successCount > 0) { alert(`Sales recorded successfully! (${successCount} items)`); await fetchStock(); setDeltas({}); }
-    else if (lastError) { alert('Failed to record sales. Error: ' + (lastError as any).message); }
-    else { alert('No sales were recorded.'); }
+    else if (lastError) alert('Failed to record sales. Error: ' + (lastError as any).message);
+    else alert('No sales were recorded.');
   };
 
   const toggleCoating = (c: string) => {
     if (c === 'Photo Grey') {
-      if (coatings.includes(c)) { setCoatings(coatings.filter(item => item !== c)); }
-      else { setCoatings([...coatings, c]); }
+      if (coatings.includes(c)) setCoatings(coatings.filter(item => item !== c));
+      else setCoatings([...coatings, c]);
     } else {
       const photoGreySelected = coatings.includes('Photo Grey');
       setCoatings(photoGreySelected ? ['Photo Grey', c] : [c]);
     }
+  };
+
+  const deleteCoating = (c: string) => {
+    setAvailableCoatings(prev => prev.filter(item => item !== c));
+    setCoatings(prev => {
+      const updated = prev.filter(item => item !== c);
+      return updated.length > 0 ? updated : ['HC'];
+    });
   };
 
   const addCustomCoating = () => {
@@ -263,7 +229,25 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
           <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Coatings</label>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1.5">
-              {availableCoatings.map(c => (<button key={c} onClick={() => toggleCoating(c)} className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`}>{c}</button>))}
+              {availableCoatings.map(c => (
+                <div key={c} className="relative group flex items-center">
+                  <button
+                    onClick={() => toggleCoating(c)}
+                    className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'} ${!NON_DELETABLE_COATINGS.includes(c) ? 'pr-5' : ''}`}
+                  >
+                    {c}
+                  </button>
+                  {!NON_DELETABLE_COATINGS.includes(c) && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteCoating(c); }}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+                      title={`Remove ${c}`}
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
             <div className="flex items-center gap-1.5 ml-auto">
               <input type="text" value={customCoating} onChange={(e) => setCustomCoating(e.target.value)} placeholder="Add coating..." className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all" />

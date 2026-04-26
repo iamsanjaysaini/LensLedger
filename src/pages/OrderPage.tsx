@@ -294,7 +294,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               .columns { display: flex; gap: 8mm; align-items: flex-start; }
               .column { flex: 1; }
               table { width: 100%; border-collapse: collapse; }
-              td { border: 0.5px solid #aaa; padding: 3.5px 6px; text-align: left; font-size: 9.5pt; line-height: 1.3; }
+              td { border: 0.5px solid #aaa; padding: 3.5px 6px; text-align: left; font-size: 12pt; font-weight: bold; line-height: 1.3; }
               .qty-col { width: 38px; text-align: center; font-weight: bold; }
               .frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; line-height: 1.1; margin: 0 1px; font-size: 0.82em; }
               .frac sup, .frac sub { display: block; line-height: 1.1; font-size: inherit; }
@@ -313,7 +313,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                   overflow: hidden;
                 }
                 .header { font-size: 14pt; }
-                td { font-size: 9pt; padding: 3px 5px; }
+                td { font-size: 12pt; font-weight: bold; padding: 3px 5px; }
               }
             </style>
           </head>

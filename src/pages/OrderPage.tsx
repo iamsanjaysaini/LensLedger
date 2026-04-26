@@ -20,7 +20,9 @@ import {
   sortLensNames,
   getDefaultShopId
 } from '../utils/lensUtils';
-import { Plus, Minus, ShoppingCart, FileText, Trash2 } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, FileText, Trash2, X } from 'lucide-react';
+
+const NON_DELETABLE_COATINGS = ['HC', 'Bluecut green'];
 
 interface CustomOrderEntry {
   id: string;
@@ -189,6 +191,14 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     }
   };
 
+  const deleteCoating = (c: string) => {
+    setAvailableCoatings(prev => prev.filter(item => item !== c));
+    setCoatings(prev => {
+      const updated = prev.filter(item => item !== c);
+      return updated.length > 0 ? updated : ['HC'];
+    });
+  };
+
   const addCustomCoating = () => {
     if (customCoating && !availableCoatings.includes(customCoating)) {
       setAvailableCoatings([...availableCoatings, customCoating]);
@@ -252,106 +262,28 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             <title>Order Report - ${dateStr}</title>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
             <style>
-              /* ── Screen styles ── */
               * { box-sizing: border-box; margin: 0; padding: 0; }
-
-              body {
-                font-family: 'Courier New', Courier, monospace;
-                font-size: 11pt;
-                background: #e5e7eb;
-              }
-
-              .controls {
-                padding: 10px 16px;
-                display: flex;
-                gap: 10px;
-                justify-content: center;
-                background: #1e293b;
-                position: sticky;
-                top: 0;
-                z-index: 10;
-              }
-              .btn {
-                background: #4f46e5;
-                color: white;
-                border: none;
-                padding: 8px 20px;
-                border-radius: 5px;
-                cursor: pointer;
-                font-family: sans-serif;
-                font-size: 13px;
-                font-weight: 600;
-                letter-spacing: 0.3px;
-              }
+              body { font-family: 'Courier New', Courier, monospace; font-size: 11pt; background: #e5e7eb; }
+              .controls { padding: 10px 16px; display: flex; gap: 10px; justify-content: center; background: #1e293b; position: sticky; top: 0; z-index: 10; }
+              .btn { background: #4f46e5; color: white; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-family: sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; }
               .btn:hover { background: #4338ca; }
               .btn.secondary { background: #0891b2; }
               .btn.secondary:hover { background: #0e7490; }
-
-              /* ── A4 Page ── */
-              .page-wrapper {
-                display: flex;
-                justify-content: center;
-                padding: 24px 16px 48px;
-              }
-
-              .page-container {
-                background: white;
-                width: 210mm;
-                min-height: 297mm;
-                padding: 15mm 12mm 15mm 12mm;
-                box-shadow: 0 4px 24px rgba(0,0,0,0.18);
-              }
-
-              .header {
-                border-bottom: 2.5px solid black;
-                padding-bottom: 8px;
-                margin-bottom: 14px;
-                text-align: center;
-                font-weight: bold;
-                font-size: 15pt;
-                letter-spacing: 1px;
-              }
-
-              .columns {
-                display: flex;
-                gap: 8mm;
-                align-items: flex-start;
-              }
+              .page-wrapper { display: flex; justify-content: center; padding: 24px 16px 48px; }
+              .page-container { background: white; width: 210mm; min-height: 297mm; padding: 15mm 12mm 15mm 12mm; box-shadow: 0 4px 24px rgba(0,0,0,0.18); }
+              .header { border-bottom: 2.5px solid black; padding-bottom: 8px; margin-bottom: 14px; text-align: center; font-weight: bold; font-size: 15pt; letter-spacing: 1px; }
+              .columns { display: flex; gap: 8mm; align-items: flex-start; }
               .column { flex: 1; }
-
-              table {
-                width: 100%;
-                border-collapse: collapse;
-              }
-              td {
-                border: 0.5px solid #aaa;
-                padding: 3.5px 6px;
-                text-align: left;
-                font-size: 9.5pt;
-                line-height: 1.3;
-              }
-              .qty-col {
-                width: 32px;
-                text-align: center;
-                font-weight: bold;
-              }
-
-              /* ── Print styles ── */
+              table { width: 100%; border-collapse: collapse; }
+              td { border: 0.5px solid #aaa; padding: 3.5px 6px; text-align: left; font-size: 9.5pt; line-height: 1.3; }
+              .qty-col { width: 32px; text-align: center; font-weight: bold; }
               @media print {
-                @page {
-                  size: A4 portrait;
-                  margin: 15mm 12mm;
-                }
+                @page { size: A4 portrait; margin: 15mm 12mm; }
                 * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                 body { background: white; }
                 .controls { display: none !important; }
                 .page-wrapper { padding: 0; }
-                .page-container {
-                  width: 100%;
-                  min-height: auto;
-                  padding: 0;
-                  box-shadow: none;
-                }
+                .page-container { width: 100%; min-height: auto; padding: 0; box-shadow: none; }
                 .header { font-size: 14pt; }
                 td { font-size: 9pt; padding: 3px 5px; }
               }
@@ -380,62 +312,37 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               </div>
             </div>
             <script>
-              // JPEG binary mein 300 DPI metadata embed karo
               function setJpegDPI(dataUrl, dpi) {
                 const binary = atob(dataUrl.split(',')[1]);
                 const bytes = new Uint8Array(binary.length);
                 for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-                // JFIF APP0 marker: FF E0 — yahan DPI data hota hai
                 if (bytes[2] === 0xFF && bytes[3] === 0xE0) {
-                  bytes[11] = 0x01;                   // units = DPI
-                  bytes[12] = Math.floor(dpi / 256);  // X DPI high byte
-                  bytes[13] = dpi % 256;              // X DPI low byte
-                  bytes[14] = Math.floor(dpi / 256);  // Y DPI high byte
-                  bytes[15] = dpi % 256;              // Y DPI low byte
+                  bytes[11] = 0x01;
+                  bytes[12] = Math.floor(dpi / 256);
+                  bytes[13] = dpi % 256;
+                  bytes[14] = Math.floor(dpi / 256);
+                  bytes[15] = dpi % 256;
                 }
-
                 let str = '';
                 bytes.forEach(b => str += String.fromCharCode(b));
                 return 'data:image/jpeg;base64,' + btoa(str);
               }
-
               function downloadJPG() {
                 const btn = event.target;
                 btn.disabled = true; btn.innerText = 'Generating...';
-
-                // A4 at 300 DPI = 2480 x 3508 px
-                const A4_W = 2480;
-                const A4_H = 3508;
-
-                html2canvas(document.querySelector('#capture'), {
-                  scale: 4,
-                  useCORS: true,
-                  width: 794,
-                  height: 1123,
-                  windowWidth: 794,
-                  windowHeight: 1123,
-                  scrollX: 0,
-                  scrollY: 0
-                }).then(canvas => {
+                const A4_W = 2480; const A4_H = 3508;
+                html2canvas(document.querySelector('#capture'), { scale: 4, useCORS: true, width: 794, height: 1123, windowWidth: 794, windowHeight: 1123, scrollX: 0, scrollY: 0 }).then(canvas => {
                   const finalCanvas = document.createElement('canvas');
-                  finalCanvas.width = A4_W;
-                  finalCanvas.height = A4_H;
+                  finalCanvas.width = A4_W; finalCanvas.height = A4_H;
                   const ctx = finalCanvas.getContext('2d');
-                  ctx.imageSmoothingEnabled = true;
-                  ctx.imageSmoothingQuality = 'high';
-                  ctx.fillStyle = 'white';
-                  ctx.fillRect(0, 0, A4_W, A4_H);
+                  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+                  ctx.fillStyle = 'white'; ctx.fillRect(0, 0, A4_W, A4_H);
                   ctx.drawImage(canvas, 0, 0, A4_W, A4_H);
-
-                  // 300 DPI metadata embed karo JPEG mein
                   const rawDataUrl = finalCanvas.toDataURL('image/jpeg', 0.95);
                   const dpiDataUrl = setJpegDPI(rawDataUrl, 300);
-
                   const link = document.createElement('a');
                   link.download = 'Order_${dateStr.replace(/\//g, '-')}.jpg';
-                  link.href = dpiDataUrl;
-                  link.click();
+                  link.href = dpiDataUrl; link.click();
                   btn.disabled = false; btn.innerText = '📥 Download JPG';
                 });
               }
@@ -511,7 +418,23 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1.5">
               {availableCoatings.map(c => (
-                <button key={c} onClick={() => toggleCoating(c)} className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`}>{c}</button>
+                <div key={c} className="relative group flex items-center">
+                  <button
+                    onClick={() => toggleCoating(c)}
+                    className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'} ${!NON_DELETABLE_COATINGS.includes(c) ? 'pr-5' : ''}`}
+                  >
+                    {c}
+                  </button>
+                  {!NON_DELETABLE_COATINGS.includes(c) && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteCoating(c); }}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+                      title={`Remove ${c}`}
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
             <div className="flex items-center gap-1.5 ml-auto">
@@ -527,33 +450,11 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-700/50 bg-amber-100/60 dark:bg-amber-900/20">
           <h3 className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider">Custom Order</h3>
         </div>
-
         <div className="p-3 flex flex-col sm:flex-row gap-2">
-          <input
-            ref={customNameRef}
-            type="text"
-            value={customName}
-            onChange={(e) => setCustomName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomEntry(); }}
-            placeholder="Lens power / description (e.g. -0.50/-2.50 CYL BLUECUT POLY)"
-            className="flex-1 text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-amber-300 dark:border-amber-700 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400 dark:focus:ring-amber-600 placeholder:text-gray-400 transition-all"
-          />
-          <input
-            type="text"
-            value={customQty}
-            onChange={(e) => setCustomQty(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomEntry(); }}
-            placeholder="Qty (e.g. 1, 1/2, 1 1/2)"
-            className="w-full sm:w-36 text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-amber-300 dark:border-amber-700 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400 dark:focus:ring-amber-600 placeholder:text-gray-400 transition-all"
-          />
-          <button
-            onClick={handleAddCustomEntry}
-            className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-4 py-2 rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap"
-          >
-            <Plus className="w-3.5 h-3.5" /> Add
-          </button>
+          <input ref={customNameRef} type="text" value={customName} onChange={(e) => setCustomName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomEntry(); }} placeholder="Lens power / description (e.g. -0.50/-2.50 CYL BLUECUT POLY)" className="flex-1 text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-amber-300 dark:border-amber-700 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400 dark:focus:ring-amber-600 placeholder:text-gray-400 transition-all" />
+          <input type="text" value={customQty} onChange={(e) => setCustomQty(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomEntry(); }} placeholder="Qty (e.g. 1, 1/2, 1 1/2)" className="w-full sm:w-36 text-xs bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-amber-300 dark:border-amber-700 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400 dark:focus:ring-amber-600 placeholder:text-gray-400 transition-all" />
+          <button onClick={handleAddCustomEntry} className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-4 py-2 rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap"><Plus className="w-3.5 h-3.5" /> Add</button>
         </div>
-
         {customEntries.length > 0 && (
           <div className="border-t border-amber-200 dark:border-amber-700/50">
             <table className="w-full">
@@ -563,12 +464,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                     <td className="px-4 py-2 text-xs font-medium text-gray-800 dark:text-gray-200">{entry.name}</td>
                     <td className="px-4 py-2 text-center text-xs font-bold text-amber-700 dark:text-amber-400 w-20">{entry.qty}</td>
                     <td className="px-3 py-2 text-right w-12">
-                      <button
-                        onClick={() => handleRemoveCustomEntry(entry.id)}
-                        className="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <button onClick={() => handleRemoveCustomEntry(entry.id)} className="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                     </td>
                   </tr>
                 ))}
@@ -597,7 +493,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                 const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, rowAxis, row.add);
                 const stateKey = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${row.sph}-${row.cyl}-${rowAxis || ''}-${coatings.join(',')}-${isKTOrProg ? row.add : ''}`;
                 const qty = deltas[stateKey]?.qty || 0;
-
                 return (
                   <tr key={rowKey} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>

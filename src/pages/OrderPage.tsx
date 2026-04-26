@@ -208,6 +208,18 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     }
   };
 
+  const toFracHTML = (n: number): string => {
+    const whole = Math.floor(n);
+    const dec = Math.round((n - whole) * 1000);
+    const fracs: Record<number, [string, string]> = {500: ["1","2"], 250: ["1","4"], 750: ["3","4"], 333: ["1","3"], 667: ["2","3"]};
+    if (dec === 0) return whole === 0 ? "" : String(whole);
+    const f = fracs[dec];
+    const fracHtml = f
+      ? `<span class="frac"><sup>${f[0]}</sup><span></span><sub>${f[1]}</sub></span>`
+      : `.${dec}`;
+    return (whole > 0 ? String(whole) : "") + fracHtml;
+  };
+
   const generateOrderReport = async () => {
     setLoading(true);
     const today = new Date().toISOString().split('T')[0];
@@ -283,7 +295,10 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               .column { flex: 1; }
               table { width: 100%; border-collapse: collapse; }
               td { border: 0.5px solid #aaa; padding: 3.5px 6px; text-align: left; font-size: 9.5pt; line-height: 1.3; }
-              .qty-col { width: 32px; text-align: center; font-weight: bold; }
+              .qty-col { width: 38px; text-align: center; font-weight: bold; }
+              .frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; line-height: 1.1; margin: 0 1px; font-size: 0.82em; }
+              .frac sup, .frac sub { display: block; line-height: 1.1; font-size: inherit; }
+              .frac span { display: block; border-top: 1.5px solid black; width: 100%; }
               @media print {
                 @page { size: A4 portrait; margin: 0; }
                 * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -313,12 +328,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                 <div class="columns">
                   <div class="column">
                     <table><tbody>
-                      ${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
+                      ${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${toFracHTML(item[1])}</td></tr>`).join('')}
                     </tbody></table>
                   </div>
                   <div class="column">
                     <table><tbody>
-                      ${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
+                      ${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${toFracHTML(item[1])}</td></tr>`).join('')}
                     </tbody></table>
                   </div>
                 </div>

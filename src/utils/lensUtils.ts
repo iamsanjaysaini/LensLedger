@@ -33,19 +33,7 @@ export interface Shop {
 export const MATERIALS: Material[] = ['CR', 'Poly', 'Glass'];
 export const VISIONS: Vision[] = ['single vision', 'KT', 'Prograssive'];
 export const DEFAULT_COATINGS = ['HC', 'HMC', 'Bluecut green', 'Bluecut Dual coat', 'Bluecut Blue', 'Photo Grey'];
-
-// ✅ Default Shop Mapping — email ke hisaab se default shop name
-export const DEFAULT_SHOP_MAPPING: Record<string, string> = {
-  'iamsanjaysaini@gmail.com': 'SS Opticals',
-  'sumitsainibrd@gmail.com': 'Narbada Eye Care',
-};
-
-// ✅ Helper function — shops array aur email do, default shop id milega
-export function getDefaultShopId(shops: Shop[], email: string): string {
-  const shopName = DEFAULT_SHOP_MAPPING[email];
-  const matched = shopName ? shops.find(s => s.name === shopName) : null;
-  return matched ? matched.id : shops[0].id;
-}
+export const PROTECTED_COATINGS = ['HC', 'HMC', 'Bluecut green'];
 
 export function generatePowerList(includeZero: boolean = true, max: number = 6.0) {
   const powers = [];

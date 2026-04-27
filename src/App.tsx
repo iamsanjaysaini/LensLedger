@@ -91,8 +91,8 @@ function App() {
                 className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 border border-transparent text-[10px] sm:text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 lg:!bg-amber-600 lg:hover:!bg-amber-500 lg:dark:!bg-amber-600 lg:dark:hover:!bg-amber-500 lg:!text-black lg:font-black focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all"
               >
                 <LogOut className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                <span className="hidden xs:inline">Sign Out</span>
-                <span className="xs:hidden">Out</span>
+                <span className="hidden xs:inline">Logout</span>
+                <span className="xs:hidden">Logout</span>
               </button>
             </div>
           </div>

@@ -19,9 +19,6 @@ import {
   Shop
 } from '../utils/lensUtils';
 import { Plus, Tag, X } from 'lucide-react';
-import { Plus, Tag, X, Settings, Database } from 'lucide-react';
-
-const DB_PROTECTED = ['HC', 'HMC', 'Bluecut Green'];
 
 export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -40,42 +37,12 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
       return saved ? JSON.parse(saved) : DEFAULT_COATINGS;
     } catch { return DEFAULT_COATINGS; }
   });
-  const [isEditingCoatings, setIsEditingCoatings] = useState(false);
-  const [savingCoatings, setSavingCoatings] = useState(false);
   const [deltas, setDeltas] = useState<Record<string, { qty: number, name: string }>>({});
   const [originalStock, setOriginalStock] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [customRows, setCustomRows] = useState<CustomLensRow[]>([]);
 
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
-  useEffect(() => { fetchCoatingsFromDB(); }, []);
-
-  async function fetchCoatingsFromDB() {
-    try {
-      const { data } = await supabase.from('app_settings').select('value').eq('key', 'available_coatings').single();
-      if (data?.value) {
-        const c = data.value as string[];
-        setAvailableCoatings(c);
-        localStorage.setItem('availableCoatings', JSON.stringify(c));
-      }
-    } catch {}
-  }
-
-  async function saveCoatingsToDB() {
-    setSavingCoatings(true);
-    try {
-      const { error } = await supabase.from('app_settings').upsert(
-        { key: 'available_coatings', value: availableCoatings },
-        { onConflict: 'key' }
-      );
-      if (!error) {
-        localStorage.setItem('availableCoatings', JSON.stringify(availableCoatings));
-        alert('Coatings saved to database!');
-        setIsEditingCoatings(false);
-      } else { alert('Failed to save: ' + error.message); }
-    } catch { alert('Error saving coatings.'); }
-    finally { setSavingCoatings(false); }
-  }
 
   useEffect(() => {
     async function loadRows() {
@@ -86,8 +53,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
       } else {
         setCustomRows(generateLensRows(powerType, compoundLimit, vision));
       }
-      if (custom) setCustomRows(custom);
-      else setCustomRows(generateLensRows(powerType, compoundLimit, vision));
       setLoading(false);
     }
     loadRows();
@@ -106,7 +71,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     } else {
       setRowAxes({});
     }
-    } else { setRowAxes({}); }
   }, [vision, sign, powerType, lensRows]);
 
   useEffect(() => {
@@ -119,15 +83,12 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
         setShops(demoShops);
         setSelectedShop(demoShops[0].id);
         return;
-        const demoShops = [{ id: '1', name: 'SS Opticals' }, { id: '2', name: 'Narbada Eye Care' }];
-        setShops(demoShops); setSelectedShop(demoShops[0].id); return;
       }
       const { data } = await supabase.from('shops').select('*');
       if (data && data.length > 0) {
         setShops(data);
         setSelectedShop(data[0].id);
       }
-      if (data && data.length > 0) { setShops(data); setSelectedShop(data[0].id); }
     }
     fetchShops();
   }, [isDemo]);
@@ -136,7 +97,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     if (selectedShop && !isDemo) {
       fetchStock();
     }
-    if (selectedShop && !isDemo) fetchStock();
     setDeltas({});
   }, [selectedShop, material, vision, coatings, sign, powerType, compoundLimit, isDemo]);
 
@@ -152,9 +112,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
         .eq('sign', sign)
         .eq('power_type', powerType);
 
-      let query = supabase.from('lens_stock').select('*')
-        .eq('shop_id', selectedShop).eq('material', material)
-        .eq('vision', vision).eq('sign', sign).eq('power_type', powerType);
       query = query.eq('coatings', `{${coatings.join(',')}}`);
 
       if (powerType === 'SPH') {
@@ -167,11 +124,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
         } else {
           query = query.gte('cyl', 2.25).lte('cyl', 4.0);
         }
-      if (powerType === 'SPH') { query = query.eq('cyl', 0); }
-      else if (powerType === 'CYL') { query = query.gt('cyl', 0).lte('cyl', 6.0); }
-      else {
-        if (compoundLimit === '2.0') { query = query.gte('cyl', 0.25).lte('cyl', 2.0); }
-        else { query = query.gte('cyl', 2.25).lte('cyl', 4.0); }
       }
 
       const { data, error } = await query;
@@ -192,8 +144,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     } finally {
       setLoading(false);
     }
-    } catch (error) { console.error("Fetch error:", error); }
-    finally { setLoading(false); }
   }
 
   const handleQuantityChange = (sph: string, cyl: string, name: string, delta: number, axis?: number, add?: string) => {
@@ -201,13 +151,11 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     const current = deltas[key] || { qty: 0, name };
     const newQty = Math.max(0, current.qty + delta);
     if (newQty === 0) { const newDeltas = { ...deltas }; delete newDeltas[key]; setDeltas(newDeltas); }
-    if (newQty === 0) { const nd = { ...deltas }; delete nd[key]; setDeltas(nd); }
     else { setDeltas({ ...deltas, [key]: { qty: newQty, name } }); }
   };
 
   const saveSale = async () => {
     if (isDemo) { alert('Demo Mode: Sales are not saved to the database.'); return; }
-    if (isDemo) { alert('Demo Mode: Sales are not saved.'); return; }
     const entries = Object.entries(deltas);
     if (entries.length === 0) { alert('Please add items to sell.'); return; }
 
@@ -215,7 +163,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     let successCount = 0;
     let lastError = null;
 
-    let successCount = 0; let lastError = null;
     for (const [key, data] of entries) {
       const [sphStr, cylStr, axisStr, addStr] = key.split(':');
       const currentStock = originalStock[key] || 0;
@@ -230,38 +177,29 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
 
       if (stockError) { console.error("Stock update error:", stockError); lastError = stockError; continue; }
 
-      if (stockError) { lastError = stockError; continue; }
       const { error: saleError } = await supabase.from('sales').insert({
         shop_id: selectedShop,
         lens_details: { name: data.name },
         quantity: data.qty
-        shop_id: selectedShop, lens_details: { name: data.name }, quantity: data.qty
       });
 
       if (saleError) { console.error("Sale record error:", saleError); lastError = saleError; }
       else { successCount++; }
-      if (saleError) { lastError = saleError; } else { successCount++; }
     }
 
     setLoading(false);
     if (successCount > 0) { alert(`Sales recorded successfully! (${successCount} items)`); await fetchStock(); setDeltas({}); }
     else if (lastError) { alert('Failed to record sales. Error: ' + (lastError as any).message); }
     else { alert('No sales were recorded.'); }
-    if (successCount > 0) { alert(`Sales recorded! (${successCount} items)`); await fetchStock(); setDeltas({}); }
-    else if (lastError) { alert('Failed: ' + (lastError as any).message); }
   };
 
   const toggleCoating = (c: string) => {
-    if (isEditingCoatings) return;
     if (c === 'Photo Grey') {
       if (coatings.includes(c)) { setCoatings(coatings.filter(item => item !== c)); }
       else { setCoatings([...coatings, c]); }
-      setCoatings(coatings.includes(c) ? coatings.filter(i => i !== c) : [...coatings, c]);
     } else {
       const photoGreySelected = coatings.includes('Photo Grey');
       setCoatings(photoGreySelected ? ['Photo Grey', c] : [c]);
-      const pg = coatings.includes('Photo Grey');
-      setCoatings(pg ? ['Photo Grey', c] : [c]);
     }
   };
 
@@ -272,7 +210,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
       localStorage.setItem('availableCoatings', JSON.stringify(updated));
       const photoGreySelected = coatings.includes('Photo Grey');
       setCoatings(photoGreySelected ? ['Photo Grey', customCoating] : [customCoating]);
-      setAvailableCoatings([...availableCoatings, customCoating]);
       setCustomCoating('');
     }
   };
@@ -280,9 +217,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   const deleteCoating = (c: string) => {
     setAvailableCoatings(availableCoatings.filter(item => item !== c));
     setCoatings(coatings.filter(item => item !== c));
-    if (DB_PROTECTED.includes(c)) return;
-    setAvailableCoatings(availableCoatings.filter(i => i !== c));
-    setCoatings(coatings.filter(i => i !== c));
   };
 
   return (
@@ -341,26 +275,8 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
           )}
         </div>
 
-        {/* COATINGS SECTION */}
         <div>
           <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Coatings</label>
-          <div className="flex items-center justify-between mb-1">
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Coatings</label>
-            <button
-              onClick={() => isEditingCoatings ? saveCoatingsToDB() : setIsEditingCoatings(true)}
-              disabled={savingCoatings}
-              className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all disabled:opacity-50 ${
-                isEditingCoatings
-                  ? 'bg-green-600 text-white hover:bg-green-700'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
-            >
-              {isEditingCoatings
-                ? <><Database className="w-3 h-3" /> {savingCoatings ? 'Saving...' : 'Save Coatings to Database'}</>
-                : <><Settings className="w-3 h-3" /> Edit Coatings</>
-              }
-            </button>
-          </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1.5">
               {availableCoatings.map(c => (
@@ -372,8 +288,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
                         : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'
                     } ${!PROTECTED_COATINGS.includes(c) ? 'pr-5' : ''}`}
-                      coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'
-                    } ${isEditingCoatings && !DB_PROTECTED.includes(c) ? 'pr-5' : ''}`}
                   >
                     {c}
                   </button>
@@ -383,8 +297,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
                       className={`absolute right-1 transition-colors ${coatings.includes(c) ? 'text-indigo-200 hover:text-white' : 'text-gray-400 hover:text-red-500'}`}
                       title="Delete coating"
                     >
-                  {isEditingCoatings && !DB_PROTECTED.includes(c) && (
-                    <button onClick={() => deleteCoating(c)} className="absolute right-1 text-gray-400 hover:text-red-500 transition-colors" title="Delete coating">
                       <X className="w-3 h-3" />
                     </button>
                   )}
@@ -395,24 +307,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
               <input type="text" value={customCoating} onChange={(e) => setCustomCoating(e.target.value)} placeholder="Add coating..." className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all" />
               <button onClick={addCustomCoating} className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 p-1 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
             </div>
-            {isEditingCoatings && (
-              <div className="flex items-center gap-1.5 ml-auto">
-                <input
-                  type="text" value={customCoating}
-                  onChange={(e) => setCustomCoating(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addCustomCoating()}
-                  placeholder="Add coating..."
-                  className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-                <button onClick={addCustomCoating} className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 p-1 rounded-md hover:bg-indigo-200 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
-              </div>
-            )}
           </div>
-          {isEditingCoatings && (
-            <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5">
-              ⚠️ HC, HMC, Bluecut Green protected hain — delete nahi ho sakte. "Save Coatings to Database" click karo changes save karne ke liye.
-            </p>
-          )}
         </div>
       </div>
 

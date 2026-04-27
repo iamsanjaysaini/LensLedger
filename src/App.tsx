@@ -7,7 +7,6 @@ import OrderPage from './pages/OrderPage';
 import SellPage from './pages/SellPage';
 import ReportsPage from './pages/ReportsPage';
 import Auth from './components/Auth';
-import { LayoutDashboard, Package, ShoppingCart, LogOut, Tag } from 'lucide-react';
 import { LayoutDashboard, Package, ShoppingCart, LogOut, Tag, FileText } from 'lucide-react';
 import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 
@@ -28,9 +27,7 @@ function App() {
       setSession(initialSession);
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       setSession(currentSession);
     });
 
@@ -66,40 +63,20 @@ function App() {
                 <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400 lg:!text-amber-500 lg:dark:!text-amber-500 lg:font-black lg:tracking-tight transition-all -mt-1">LensLedger</span>
               </Link>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                <Link
-                  to="/"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/' ? 'border-indigo-500 text-gray-900 dark:text-white lg:!text-amber-400 lg:!border-amber-400 lg:dark:!text-amber-400 lg:dark:!border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:!text-amber-600/70 lg:hover:!text-amber-400 lg:dark:!text-amber-600/60 lg:dark:hover:!text-amber-400'}`}
-                >
-                  <LayoutDashboard className="w-4 h-4 mr-2" />
-                  Dashboard
+                <Link to="/" className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/' ? 'border-indigo-500 text-gray-900 dark:text-white lg:!text-amber-400 lg:!border-amber-400 lg:dark:!text-amber-400 lg:dark:!border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:!text-amber-600/70 lg:hover:!text-amber-400 lg:dark:!text-amber-600/60 lg:dark:hover:!text-amber-400'}`}>
+                  <LayoutDashboard className="w-4 h-4 mr-2" />Dashboard
                 </Link>
-                <Link
-                  to="/stock"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/stock' ? 'border-indigo-500 text-gray-900 dark:text-white lg:!text-amber-400 lg:!border-amber-400 lg:dark:!text-amber-400 lg:dark:!border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:!text-amber-600/70 lg:hover:!text-amber-400 lg:dark:!text-amber-600/60 lg:dark:hover:!text-amber-400'}`}
-                >
-                  <Package className="w-4 h-4 mr-2" />
-                  Stock
+                <Link to="/stock" className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/stock' ? 'border-indigo-500 text-gray-900 dark:text-white lg:!text-amber-400 lg:!border-amber-400 lg:dark:!text-amber-400 lg:dark:!border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:!text-amber-600/70 lg:hover:!text-amber-400 lg:dark:!text-amber-600/60 lg:dark:hover:!text-amber-400'}`}>
+                  <Package className="w-4 h-4 mr-2" />Stock
                 </Link>
-                <Link
-                  to="/order"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/order' ? 'border-indigo-500 text-gray-900 dark:text-white lg:!text-amber-400 lg:!border-amber-400 lg:dark:!text-amber-400 lg:dark:!border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:!text-amber-600/70 lg:hover:!text-amber-400 lg:dark:!text-amber-600/60 lg:dark:hover:!text-amber-400'}`}
-                >
-                  <ShoppingCart className="w-4 h-4 mr-2" />
-                  Orders
+                <Link to="/order" className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/order' ? 'border-indigo-500 text-gray-900 dark:text-white lg:!text-amber-400 lg:!border-amber-400 lg:dark:!text-amber-400 lg:dark:!border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:!text-amber-600/70 lg:hover:!text-amber-400 lg:dark:!text-amber-600/60 lg:dark:hover:!text-amber-400'}`}>
+                  <ShoppingCart className="w-4 h-4 mr-2" />Orders
                 </Link>
-                <Link
-                  to="/sell"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/sell' ? 'border-indigo-500 text-gray-900 dark:text-white lg:!text-amber-400 lg:!border-amber-400 lg:dark:!text-amber-400 lg:dark:!border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:!text-amber-600/70 lg:hover:!text-amber-400 lg:dark:!text-amber-600/60 lg:dark:hover:!text-amber-400'}`}
-                >
-                  <Tag className="w-4 h-4 mr-2" />
-                  Sell
+                <Link to="/sell" className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/sell' ? 'border-indigo-500 text-gray-900 dark:text-white lg:!text-amber-400 lg:!border-amber-400 lg:dark:!text-amber-400 lg:dark:!border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:!text-amber-600/70 lg:hover:!text-amber-400 lg:dark:!text-amber-600/60 lg:dark:hover:!text-amber-400'}`}>
+                  <Tag className="w-4 h-4 mr-2" />Sell
                 </Link>
-                <Link
-                  to="/reports"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/reports' ? 'border-indigo-500 text-gray-900 dark:text-white lg:!text-amber-400 lg:!border-amber-400 lg:dark:!text-amber-400 lg:dark:!border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:!text-amber-600/70 lg:hover:!text-amber-400 lg:dark:!text-amber-600/60 lg:dark:hover:!text-amber-400'}`}
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Reports
+                <Link to="/reports" className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/reports' ? 'border-indigo-500 text-gray-900 dark:text-white lg:!text-amber-400 lg:!border-amber-400 lg:dark:!text-amber-400 lg:dark:!border-amber-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 lg:!text-amber-600/70 lg:hover:!text-amber-400 lg:dark:!text-amber-600/60 lg:dark:hover:!text-amber-400'}`}>
+                  <FileText className="w-4 h-4 mr-2" />Reports
                 </Link>
               </div>
             </div>
@@ -123,42 +100,21 @@ function App() {
 
         {/* Mobile menu */}
         <div className="sm:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-2">
-          <div className="grid grid-cols-4 gap-2">
           <div className="grid grid-cols-5 gap-1">
-            <Link
-              to="/"
-              className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-            >
-              <LayoutDashboard className="w-5 h-5 mb-1" />
-              Dashboard
+            <Link to="/" className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+              <LayoutDashboard className="w-5 h-5 mb-1" />Dashboard
             </Link>
-            <Link
-              to="/stock"
-              className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/stock' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-            >
-              <Package className="w-5 h-5 mb-1" />
-              Stock
+            <Link to="/stock" className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/stock' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+              <Package className="w-5 h-5 mb-1" />Stock
             </Link>
-            <Link
-              to="/order"
-              className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/order' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-            >
-              <ShoppingCart className="w-5 h-5 mb-1" />
-              Orders
+            <Link to="/order" className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/order' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+              <ShoppingCart className="w-5 h-5 mb-1" />Orders
             </Link>
-            <Link
-              to="/sell"
-              className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/sell' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-            >
-              <Tag className="w-5 h-5 mb-1" />
-              Sell
+            <Link to="/sell" className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/sell' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+              <Tag className="w-5 h-5 mb-1" />Sell
             </Link>
-            <Link
-              to="/reports"
-              className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/reports' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-            >
-              <FileText className="w-5 h-5 mb-1" />
-              Reports
+            <Link to="/reports" className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/reports' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+              <FileText className="w-5 h-5 mb-1" />Reports
             </Link>
           </div>
         </div>

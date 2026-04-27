@@ -33,6 +33,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [compoundLimit, setCompoundLimit] = useState('2.0');
   const [rowAxes, setRowAxes] = useState<Record<string, number>>({});
   const [customCoating, setCustomCoating] = useState('');
+  const [customPower, setCustomPower] = useState('');
   const [availableCoatings, setAvailableCoatings] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('availableCoatings');
@@ -152,6 +153,18 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       setCoatings(photoGreySelected ? ['Photo Grey', customCoating] : [customCoating]);
       setCustomCoating('');
     }
+  };
+
+  const addCustomPowerToOrder = () => {
+    if (!customPower.trim()) return;
+    const coatingPart = coatings.join(' ');
+    const materialPart = material === 'CR' ? '' : material;
+    const visionPart = vision === 'single vision' ? '' : vision;
+    const name = `${customPower.trim()} ${coatingPart} ${materialPart} ${visionPart}`.replace(/\s+/g, ' ').trim();
+    const key = `custom-${selectedShop}-${name}`;
+    const current = deltas[key] || { qty: 0, name };
+    setDeltas({ ...deltas, [key]: { qty: current.qty + 0.5, name } });
+    setCustomPower('');
   };
 
   const deleteCoating = (c: string) => {
@@ -358,6 +371,26 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             </div>
           </div>
         </div>
+
+        <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
+          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Custom Lens Power (Non-Stock)</label>
+          <div className="flex gap-2">
+            <input 
+              type="text" 
+              value={customPower} 
+              onChange={(e) => setCustomPower(e.target.value)} 
+              placeholder="Enter power (e.g. +12.00 -4.50 x 90)" 
+              className="flex-1 text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+              onKeyPress={(e) => e.key === 'Enter' && addCustomPowerToOrder()}
+            />
+            <button 
+              onClick={addCustomPowerToOrder}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center text-sm font-medium hover:bg-indigo-700 shadow-sm transition-colors"
+            >
+              <Plus className="w-4 h-4 mr-1" /> Add to Order
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
@@ -372,6 +405,44 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              {Object.entries(deltas)
+                .filter(([key]) => key.startsWith(`custom-${selectedShop}-`))
+                .map(([key, data]) => (
+                  <tr key={key} className="bg-indigo-50/30 dark:bg-indigo-900/10 hover:bg-indigo-100/50 dark:hover:bg-indigo-900/20 transition-colors">
+                    <td className="px-2 py-1.5 whitespace-nowrap text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                      <span className="bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded mr-2 text-[10px] uppercase">Custom</span>
+                      {data.name}
+                    </td>
+                    {powerType !== 'SPH' && <td className="px-1 py-1.5 text-center text-gray-400">-</td>}
+                    <td className="px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold text-indigo-600 dark:text-indigo-400">{data.qty.toFixed(2)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-right">
+                      <div className="flex justify-end gap-1">
+                        <button 
+                          onClick={() => {
+                            const newQty = Math.max(0, data.qty - 0.5);
+                            if (newQty === 0) {
+                              const newDeltas = { ...deltas };
+                              delete newDeltas[key];
+                              setDeltas(newDeltas);
+                            } else {
+                              setDeltas({ ...deltas, [key]: { ...data, qty: newQty } });
+                            }
+                          }} 
+                          className="p-1 rounded bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 transition-colors"
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => setDeltas({ ...deltas, [key]: { ...data, qty: data.qty + 0.5 } })} 
+                          className="p-1 rounded bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              }
               {lensRows.map((row, index) => {
                 const rowKey = `${row.sph}-${row.cyl}-${row.add || ''}-${index}`;
                 const rowAxis = rowAxes[rowKey];

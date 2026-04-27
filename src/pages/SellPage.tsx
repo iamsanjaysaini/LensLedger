@@ -19,7 +19,7 @@ import {
 } from '../utils/lensUtils';
 import { Plus, Tag, X, Settings, Database } from 'lucide-react';
 
-const DB_PROTECTED = ['HC', 'HMC', 'Bluecut Green'];
+const DB_PROTECTED = ['HC', 'HMC', 'Bluecut'];
 
 export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -312,7 +312,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
           </div>
           {isEditingCoatings && (
             <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5">
-              ⚠️ HC, HMC, Bluecut Green protected hain — delete nahi ho sakte. "Save Coatings to Database" click karo changes save karne ke liye.
+              ⚠️ HC, HMC, Bluecut protected hain — delete nahi ho sakte. "Save Coatings to Database" click karo changes save karne ke liye.
             </p>
           )}
         </div>

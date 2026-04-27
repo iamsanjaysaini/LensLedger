@@ -273,20 +273,13 @@ export const PROGRESSIVE_AXIS = [30, 60, 90, 120, 150, 180];
 export function formatReportQty(qty: number): string {
   const whole = Math.floor(qty);
   const frac = qty % 1;
-  let res = '';
-
-  if (whole > 0) {
-    res = whole.toString();
-  }
-
+  
   if (frac === 0.5) {
-    if (res !== '') res += ' ';
-    res += '1/2';
+    const wholePart = whole > 0 ? `${whole} ` : '';
+    return `${wholePart}<span class="frac"><span>1</span><span class="bottom">2</span></span>`;
   }
-
-  if (res === '') res = '0';
-
-  return res;
+  
+  return qty.toString();
 }
 
 export function sortLensNames(a: string, b: string): number {

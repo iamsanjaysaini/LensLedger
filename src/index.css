@@ -31,3 +31,21 @@ body {
 #root {
   width: 100%;
 }
+
+.frac {
+  display: inline-block;
+  vertical-align: middle;
+  text-align: center;
+  font-size: 0.8em;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+.frac span {
+  display: block;
+  padding: 0 2px;
+}
+
+.frac span.bottom {
+  border-top: 1px solid currentColor;
+}

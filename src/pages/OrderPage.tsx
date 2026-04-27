@@ -209,6 +209,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               table { width: 100%; border-collapse: collapse; }
               td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
               .qty-col { width: 40px; text-align: center; font-weight: bold; }
+              .frac { display: inline-block; vertical-align: middle; text-align: center; font-size: 0.8em; line-height: 1; margin-left: 2px; }
+              .frac span { display: block; padding: 0 2px; }
+              .frac span.bottom { border-top: 1px solid black; }
               @media print { .controls { display: none; } body { background: white; } }
             </style>
           </head>

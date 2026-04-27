@@ -186,6 +186,9 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
             table { width: 100%; border-collapse: collapse; }
             td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
             .qty-col { width: 40px; text-align: center; font-weight: bold; }
+            .frac { display: inline-block; vertical-align: middle; text-align: center; font-size: 0.8em; line-height: 1; margin-left: 2px; }
+            .frac span { display: block; padding: 0 2px; }
+            .frac span.bottom { border-top: 1px solid black; }
             @media print { .controls { display: none; } body { background: white; } }
           </style>
         </head>
@@ -315,7 +318,9 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
                 {items.map((item, i) => (
                   <tr key={i} className="even:bg-gray-50 dark:even:bg-gray-700/40 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10">
                     <td className="px-4 py-2 text-xs text-gray-700 dark:text-gray-300 font-medium">{item.name}</td>
-                    <td className="px-4 py-2 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400">{formatReportQty(item.qty)}</td>
+                    <td className="px-4 py-2 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                      <span dangerouslySetInnerHTML={{ __html: formatReportQty(item.qty) }} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

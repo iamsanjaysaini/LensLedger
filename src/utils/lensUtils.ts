@@ -32,7 +32,7 @@ export interface Shop {
 
 export const MATERIALS: Material[] = ['CR', 'Poly', 'Glass'];
 export const VISIONS: Vision[] = ['single vision', 'KT', 'Prograssive'];
-export const DEFAULT_COATINGS = ['HC', 'HMC', 'Bluecut green', 'Bluecut Dual coat', 'Bluecut Blue', 'Photo Grey'];
+export const DEFAULT_COATINGS = ['HC', 'HMC', 'Bluecut', 'Bluecut Dual coat', 'Bluecut Blue', 'Photo Grey'];
 
 // ✅ Default Shop Mapping — email ke hisaab se default shop name
 export const DEFAULT_SHOP_MAPPING: Record<string, string> = {
@@ -46,7 +46,8 @@ export function getDefaultShopId(shops: Shop[], email: string): string {
   const matched = shopName ? shops.find(s => s.name === shopName) : null;
   return matched ? matched.id : shops[0].id;
 }
-export const PROTECTED_COATINGS = ['HC', 'HMC', 'Bluecut green'];
+
+export const PROTECTED_COATINGS = ['HC', 'HMC', 'Bluecut'];
 
 export function generatePowerList(includeZero: boolean = true, max: number = 6.0) {
   const powers = [];

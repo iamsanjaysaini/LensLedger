@@ -34,7 +34,15 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   const [availableCoatings, setAvailableCoatings] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('availableCoatings');
-      return saved ? JSON.parse(saved) : DEFAULT_COATINGS;
+      if (saved) {
+        let coatings = JSON.parse(saved);
+        if (coatings.includes('Bluecut green')) {
+          coatings = coatings.map((c: string) => c === 'Bluecut green' ? 'Bluecut' : c);
+          localStorage.setItem('availableCoatings', JSON.stringify(coatings));
+        }
+        return coatings;
+      }
+      return DEFAULT_COATINGS;
     } catch { return DEFAULT_COATINGS; }
   });
   const [deltas, setDeltas] = useState<Record<string, { qty: number, name: string }>>({});

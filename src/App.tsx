@@ -7,6 +7,7 @@ import OrderPage from './pages/OrderPage';
 import SellPage from './pages/SellPage';
 import ReportsPage from './pages/ReportsPage';
 import Auth from './components/Auth';
+import { LayoutDashboard, Package, ShoppingCart, LogOut, Tag } from 'lucide-react';
 import { LayoutDashboard, Package, ShoppingCart, LogOut, Tag, FileText } from 'lucide-react';
 import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 
@@ -114,7 +115,7 @@ function App() {
               >
                 <LogOut className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
                 <span className="hidden xs:inline">Sign Out</span>
-                <span className="xs:hidden">Sign Out</span>
+                <span className="xs:hidden">Out</span>
               </button>
             </div>
           </div>
@@ -122,6 +123,7 @@ function App() {
 
         {/* Mobile menu */}
         <div className="sm:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-2">
+          <div className="grid grid-cols-4 gap-2">
           <div className="grid grid-cols-5 gap-1">
             <Link
               to="/"

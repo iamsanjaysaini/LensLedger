@@ -8,6 +8,7 @@ import {
   MATERIALS,
   VISIONS,
   DEFAULT_COATINGS,
+  PROTECTED_COATINGS,
   formatLensName,
   Material,
   Vision,
@@ -19,9 +20,10 @@ import {
   formatReportQty,
   sortLensNames
 } from '../utils/lensUtils';
+import { Plus, Minus, ShoppingCart, FileText, X } from 'lucide-react';
 import { Plus, Minus, ShoppingCart, FileText, X, Settings, Database } from 'lucide-react';
 
-const DB_PROTECTED = ['HC', 'HMC', 'Bluecut'];
+const DB_PROTECTED = ['HC', 'HMC', 'Bluecut Green'];
 
 export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -81,6 +83,11 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     async function loadRows() {
       setLoading(true);
       const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
+      if (custom) {
+        setCustomRows(custom);
+      } else {
+        setCustomRows(generateLensRows(powerType, compoundLimit, vision));
+      }
       if (custom) setCustomRows(custom);
       else setCustomRows(generateLensRows(powerType, compoundLimit, vision));
       setLoading(false);
@@ -98,6 +105,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         newAxes[`${row.sph}-${row.cyl}-${row.add || ''}-${index}`] = defaultAxis;
       });
       setRowAxes(newAxes);
+    } else {
+      setRowAxes({});
+    }
     } else { setRowAxes({}); }
   }, [vision, sign, powerType, lensRows]);
 
@@ -105,9 +115,16 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     async function fetchShops() {
       if (isDemo) {
         const demoShops = [{ id: '1', name: 'SS Opticals' }, { id: '2', name: 'Narbada Eye Care' }];
+        setShops(demoShops);
+        setSelectedShop(demoShops[0].id);
+        return;
         setShops(demoShops); setSelectedShop(demoShops[0].id); return;
       }
       const { data } = await supabase.from('shops').select('*');
+      if (data && data.length > 0) {
+        setShops(data);
+        setSelectedShop(data[0].id);
+      }
       if (data && data.length > 0) { setShops(data); setSelectedShop(data[0].id); }
     }
     fetchShops();
@@ -117,6 +134,13 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     const key = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${sph}-${cyl}-${axis || ''}-${coatings.join(',')}-${isKTOrProg ? add : ''}`;
     const current = deltas[key] || { qty: 0, name };
     const newQty = Math.max(0, current.qty + delta);
+    if (newQty === 0) {
+      const newDeltas = { ...deltas };
+      delete newDeltas[key];
+      setDeltas(newDeltas);
+    } else {
+      setDeltas({ ...deltas, [key]: { qty: newQty, name } });
+    }
     if (newQty === 0) { const nd = { ...deltas }; delete nd[key]; setDeltas(nd); }
     else { setDeltas({ ...deltas, [key]: { qty: newQty, name } }); }
   };
@@ -126,14 +150,23 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     const entries = Object.entries(deltas);
     if (entries.length === 0) { alert('Please add items to order.'); return; }
     setLoading(true);
+    let successCount = 0;
+    let lastError = null;
     let successCount = 0; let lastError = null;
     for (const [_, data] of entries) {
       const { error } = await supabase.from('orders').insert({
+        shop_id: selectedShop,
+        lens_details: { name: data.name },
+        quantity: data.qty
         shop_id: selectedShop, lens_details: { name: data.name }, quantity: data.qty
       });
+      if (error) { console.error(error); lastError = error; }
+      else { successCount++; }
       if (error) { lastError = error; } else { successCount++; }
     }
     setLoading(false);
+    if (successCount > 0) { alert(`Orders saved successfully! (${successCount} items)`); setDeltas({}); }
+    else if (lastError) { alert('Failed to save orders. Error: ' + (lastError as any).message); }
     if (successCount > 0) { alert(`Orders saved! (${successCount} items)`); setDeltas({}); }
     else if (lastError) { alert('Failed: ' + (lastError as any).message); }
   };
@@ -141,8 +174,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const toggleCoating = (c: string) => {
     if (isEditingCoatings) return;
     if (c === 'Photo Grey') {
+      if (coatings.includes(c)) { setCoatings(coatings.filter(item => item !== c)); }
+      else { setCoatings([...coatings, c]); }
       setCoatings(coatings.includes(c) ? coatings.filter(i => i !== c) : [...coatings, c]);
     } else {
+      const photoGreySelected = coatings.includes('Photo Grey');
+      setCoatings(photoGreySelected ? ['Photo Grey', c] : [c]);
       const pg = coatings.includes('Photo Grey');
       setCoatings(pg ? ['Photo Grey', c] : [c]);
     }
@@ -150,12 +187,21 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const addCustomCoating = () => {
     if (customCoating && !availableCoatings.includes(customCoating)) {
+      const updated = [...availableCoatings, customCoating];
+      setAvailableCoatings(updated);
+      localStorage.setItem('availableCoatings', JSON.stringify(updated));
+      const photoGreySelected = coatings.includes('Photo Grey');
+      setCoatings(photoGreySelected ? ['Photo Grey', customCoating] : [customCoating]);
       setAvailableCoatings([...availableCoatings, customCoating]);
       setCustomCoating('');
     }
   };
 
   const deleteCoating = (c: string) => {
+    const updated = availableCoatings.filter(item => item !== c);
+    setAvailableCoatings(updated);
+    localStorage.setItem('availableCoatings', JSON.stringify(updated));
+    setCoatings(coatings.filter(item => item !== c));
     if (DB_PROTECTED.includes(c)) return;
     setAvailableCoatings(availableCoatings.filter(i => i !== c));
     setCoatings(coatings.filter(i => i !== c));
@@ -164,9 +210,25 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const generateOrderReport = async () => {
     setLoading(true);
     const today = new Date().toISOString().split('T')[0];
+    const { data: orders } = await supabase
+        .from('orders')
+        .select('lens_details, quantity')
+        .gte('created_at', today);
+
+    if (!orders || orders.length === 0) {
+        setLoading(false);
+        alert('No orders found for today.');
+        return;
+    }
+
     const { data: orders } = await supabase.from('orders').select('lens_details, quantity').gte('created_at', today);
     if (!orders || orders.length === 0) { setLoading(false); alert('No orders found for today.'); return; }
     const summary: Record<string, number> = {};
+    orders.forEach(o => {
+        let name = o.lens_details.name;
+        summary[name] = (summary[name] || 0) + Number(o.quantity);
+    });
+
     orders.forEach(o => { summary[o.lens_details.name] = (summary[o.lens_details.name] || 0) + Number(o.quantity); });
     const items = Object.entries(summary).sort((a, b) => sortLensNames(a[0], b[0]));
     const dateStr = new Date().toLocaleDateString('en-GB');
@@ -174,8 +236,73 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     const col1 = items.slice(0, MAX_ROWS_PER_COL);
     const col2 = items.slice(MAX_ROWS_PER_COL);
     setLoading(false);
+
     const win = window.open('', '_blank');
     if (win) {
+      win.document.write(`
+        <html>
+          <head>
+            <title>Order Report - ${dateStr}</title>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+            <style>
+              @page { size: A4; margin: 0; }
+              * { box-sizing: border-box; }
+              body { font-family: 'Courier New', Courier, monospace; font-size: 11px; margin: 0; padding: 0; background: white; }
+              .controls { padding: 8px 16px; display: flex; gap: 10px; justify-content: center; background: white; border-bottom: 1px solid #eee; }
+              .btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; }
+              .btn:hover { background: #4338ca; }
+              .page-container { background: white; width: 794px; min-height: 1123px; padding: 10mm; margin: 0 auto; }
+              .header { border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; font-size: 16px; }
+              .columns { display: flex; gap: 10px; }
+              .column { flex: 1; }
+              table { width: 100%; border-collapse: collapse; }
+              td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+              .qty-col { width: 40px; text-align: center; font-weight: bold; }
+              @media print { .controls { display: none; } body { background: white; } }
+            </style>
+          </head>
+          <body>
+            <div class="controls">
+              <button class="btn" onclick="window.print()">Print / Save PDF</button>
+              <button class="btn" onclick="downloadJPG()">Download JPG</button>
+            </div>
+            <div id="capture" class="page-container">
+              <div class="header">DATE: ${dateStr}</div>
+              <div class="columns">
+                <div class="column">
+                  <table><tbody>
+                    ${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
+                  </tbody></table>
+                </div>
+                <div class="column">
+                  <table><tbody>
+                    ${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
+                  </tbody></table>
+                </div>
+              </div>
+            </div>
+            <script>
+              function downloadJPG() {
+                const btn = document.querySelector('button[onclick="downloadJPG()"]');
+                if (btn) { btn.disabled = true; btn.innerText = 'Generating...'; }
+                const a4Width = 794; const a4Height = 1123;
+                html2canvas(document.querySelector("#capture"), { scale: 2, width: a4Width, height: a4Height, windowWidth: a4Width, windowHeight: a4Height }).then(canvas => {
+                  const finalCanvas = document.createElement('canvas');
+                  finalCanvas.width = a4Width * 2; finalCanvas.height = a4Height * 2;
+                  const ctx = finalCanvas.getContext('2d');
+                  ctx.fillStyle = 'white'; ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+                  ctx.drawImage(canvas, 0, 0);
+                  const link = document.createElement('a');
+                  link.download = 'Order_${dateStr.replace(/\//g, '-')}.jpg';
+                  link.href = finalCanvas.toDataURL('image/jpeg', 0.9);
+                  link.click();
+                  if (btn) { btn.disabled = false; btn.innerText = 'Download JPG'; }
+                });
+              }
+            </script>
+          </body>
+        </html>
+      `);
       win.document.write(`<html><head><title>Order Report - ${dateStr}</title><script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script><style>@page{size:A4;margin:0}*{box-sizing:border-box}body{font-family:'Courier New',Courier,monospace;font-size:11px;margin:0;padding:0;background:white}.controls{padding:8px 16px;display:flex;gap:10px;justify-content:center;background:white;border-bottom:1px solid #eee}.btn{background:#4f46e5;color:white;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-family:sans-serif;font-size:14px}.btn:hover{background:#4338ca}.page-container{background:white;width:794px;min-height:1123px;padding:10mm;margin:0 auto}.header{border-bottom:2px solid black;padding-bottom:10px;margin-bottom:20px;text-align:center;font-weight:bold;font-size:16px}.columns{display:flex;gap:10px}.column{flex:1}table{width:100%;border-collapse:collapse}td{border:1px solid #ccc;padding:6px 8px;text-align:left}.qty-col{width:40px;text-align:center;font-weight:bold}@media print{.controls{display:none}body{background:white}}</style></head><body><div class="controls"><button class="btn" onclick="window.print()">Print / Save PDF</button><button class="btn" onclick="downloadJPG()">Download JPG</button></div><div id="capture" class="page-container"><div class="header">DATE: ${dateStr}</div><div class="columns"><div class="column"><table><tbody>${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}</tbody></table></div><div class="column"><table><tbody>${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}</tbody></table></div></div></div><script>function downloadJPG(){const btn=document.querySelector('button[onclick="downloadJPG()"]');if(btn){btn.disabled=true;btn.innerText='Generating...';}html2canvas(document.querySelector("#capture"),{scale:2,width:794,height:1123,windowWidth:794,windowHeight:1123}).then(canvas=>{const fc=document.createElement('canvas');fc.width=1588;fc.height=2246;const ctx=fc.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,fc.width,fc.height);ctx.drawImage(canvas,0,0);const link=document.createElement('a');link.download='Order_${dateStr.replace(/\//g, '-')}.jpg';link.href=fc.toDataURL('image/jpeg',0.9);link.click();if(btn){btn.disabled=false;btn.innerText='Download JPG';}});}</script></body></html>`);
       win.document.close();
     }
@@ -196,12 +323,18 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Shop</label>
             <div className="flex gap-1.5">
+              {shops.map(shop => (
+                <button key={shop.id} onClick={() => setSelectedShop(shop.id)} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${selectedShop === shop.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{shop.name}</button>
+              ))}
               {shops.map(shop => (<button key={shop.id} onClick={() => setSelectedShop(shop.id)} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${selectedShop === shop.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{shop.name}</button>))}
             </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Material</label>
             <div className="flex gap-1.5">
+              {MATERIALS.map(m => (
+                <button key={m} onClick={() => setMaterial(m)} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${material === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{m}</button>
+              ))}
               {MATERIALS.map(m => (<button key={m} onClick={() => setMaterial(m)} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${material === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{m}</button>))}
             </div>
           </div>
@@ -217,6 +350,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           <div className="md:col-span-1">
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Power Type</label>
             <div className="flex flex-wrap gap-1 mt-1">
+              {['SPH', 'CYL', 'Compound', 'Cross Compound'].map((type) => (
+                <button key={type} onClick={() => setPowerType(type as PowerType)} className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}>{type}</button>
+              ))}
               {['SPH', 'CYL', 'Compound', 'Cross Compound'].map((type) => (<button key={type} onClick={() => setPowerType(type as PowerType)} className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}>{type}</button>))}
             </div>
           </div>
@@ -240,6 +376,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
         {/* COATINGS SECTION */}
         <div>
+          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Coatings</label>
           <div className="flex items-center justify-between mb-1">
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Coatings</label>
             <button
@@ -264,11 +401,21 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                   <button
                     onClick={() => toggleCoating(c)}
                     className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${
+                      coatings.includes(c)
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'
+                    } ${!PROTECTED_COATINGS.includes(c) ? 'pr-5' : ''}`}
                       coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'
                     } ${isEditingCoatings && !DB_PROTECTED.includes(c) ? 'pr-5' : ''}`}
                   >
                     {c}
                   </button>
+                  {!PROTECTED_COATINGS.includes(c) && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteCoating(c); }}
+                      className={`absolute right-1 transition-colors ${coatings.includes(c) ? 'text-indigo-200 hover:text-white' : 'text-gray-400 hover:text-red-500'}`}
+                      title="Delete coating"
+                    >
                   {isEditingCoatings && !DB_PROTECTED.includes(c) && (
                     <button onClick={() => deleteCoating(c)} className="absolute right-1 text-gray-400 hover:text-red-500 transition-colors" title="Delete coating">
                       <X className="w-3 h-3" />
@@ -276,6 +423,10 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                   )}
                 </div>
               ))}
+            </div>
+            <div className="flex items-center gap-1.5 ml-auto">
+              <input type="text" value={customCoating} onChange={(e) => setCustomCoating(e.target.value)} placeholder="Add coating..." className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all" />
+              <button onClick={addCustomCoating} className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 p-1 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
             </div>
             {isEditingCoatings && (
               <div className="flex items-center gap-1.5 ml-auto">
@@ -292,7 +443,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           </div>
           {isEditingCoatings && (
             <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5">
-              ⚠️ HC, HMC, Bluecut protected hain — delete nahi ho sakte. "Save Coatings to Database" click karo changes save karne ke liye.
+              ⚠️ HC, HMC, Bluecut Green protected hain — delete nahi ho sakte. "Save Coatings to Database" click karo changes save karne ke liye.
             </p>
           )}
         </div>
@@ -316,6 +467,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                 const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, rowAxis, row.add);
                 const stateKey = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${row.sph}-${row.cyl}-${rowAxis || ''}-${coatings.join(',')}-${isKTOrProg ? row.add : ''}`;
                 const qty = deltas[stateKey]?.qty || 0;
+
                 return (
                   <tr key={rowKey} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300">{name}</td>

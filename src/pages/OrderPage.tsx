@@ -33,7 +33,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [compoundLimit, setCompoundLimit] = useState('2.0');
   const [rowAxes, setRowAxes] = useState<Record<string, number>>({});
   const [customCoating, setCustomCoating] = useState('');
-  const [availableCoatings, setAvailableCoatings] = useState(DEFAULT_COATINGS);
+  const [availableCoatings, setAvailableCoatings] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('availableCoatings');
+      return saved ? JSON.parse(saved) : DEFAULT_COATINGS;
+    } catch { return DEFAULT_COATINGS; }
+  });
   const [deltas, setDeltas] = useState<Record<string, { qty: number, name: string }>>({});
   const [loading, setLoading] = useState(false);
   const [customRows, setCustomRows] = useState<CustomLensRow[]>([]);
@@ -132,7 +137,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const addCustomCoating = () => {
     if (customCoating && !availableCoatings.includes(customCoating)) {
-      setAvailableCoatings([...availableCoatings, customCoating]);
+      const updated = [...availableCoatings, customCoating];
+      setAvailableCoatings(updated);
+      localStorage.setItem('availableCoatings', JSON.stringify(updated));
       const photoGreySelected = coatings.includes('Photo Grey');
       setCoatings(photoGreySelected ? ['Photo Grey', customCoating] : [customCoating]);
       setCustomCoating('');
@@ -140,7 +147,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   };
 
   const deleteCoating = (c: string) => {
-    setAvailableCoatings(availableCoatings.filter(item => item !== c));
+    const updated = availableCoatings.filter(item => item !== c);
+    setAvailableCoatings(updated);
+    localStorage.setItem('availableCoatings', JSON.stringify(updated));
     setCoatings(coatings.filter(item => item !== c));
   };
 

@@ -51,6 +51,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [customRows, setCustomRows] = useState<CustomLensRow[]>([]);
+  const [selectedRowIndexes, setSelectedRowIndexes] = useState<Set<number>>(new Set());
   const [newRowPower, setNewRowPower] = useState({ sph: '', cyl: '', add: '' });
   const [insertAt, setInsertAt] = useState<number | null>(null);
 
@@ -249,6 +250,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     }
     setIsEditMode(!isEditMode);
     setInsertAt(null);
+    setSelectedRowIndexes(new Set());
   };
 
   const handleSaveList = async () => {
@@ -299,11 +301,31 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     }
   };
 
-  const deleteRow = (index: number) => {
-    if (!window.confirm('Are you sure? Deleting this row will also delete its stock for all shops when you save.')) return;
-    const newRows = [...customRows];
-    newRows.splice(index, 1);
+  const toggleRowSelection = (index: number) => {
+    const newSelection = new Set(selectedRowIndexes);
+    if (newSelection.has(index)) {
+      newSelection.delete(index);
+    } else {
+      newSelection.add(index);
+    }
+    setSelectedRowIndexes(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedRowIndexes.size === customRows.length) {
+      setSelectedRowIndexes(new Set());
+    } else {
+      setSelectedRowIndexes(new Set(customRows.map((_, i) => i)));
+    }
+  };
+
+  const deleteSelectedRows = () => {
+    if (selectedRowIndexes.size === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedRowIndexes.size} selected rows? This will also delete their stock for all shops when you save.`)) return;
+    
+    const newRows = customRows.filter((_, index) => !selectedRowIndexes.has(index));
     setCustomRows(newRows);
+    setSelectedRowIndexes(new Set());
   };
 
   const moveRowUp = (index: number) => {
@@ -313,6 +335,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     newRows[index - 1] = newRows[index];
     newRows[index] = temp;
     setCustomRows(newRows);
+    setSelectedRowIndexes(new Set()); // Reset selection to avoid confusion after move
   };
 
   const moveRowDown = (index: number) => {
@@ -322,6 +345,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     newRows[index + 1] = newRows[index];
     newRows[index] = temp;
     setCustomRows(newRows);
+    setSelectedRowIndexes(new Set()); // Reset selection
   };
 
   const initiateInsert = (index: number) => {
@@ -345,6 +369,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     });
     setCustomRows(newRows);
     setInsertAt(null);
+    setSelectedRowIndexes(new Set());
   };
 
   return (
@@ -363,7 +388,12 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             </>
           ) : (
             <>
-              <button onClick={handleEditToggle} className="bg-red-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-red-700 text-[10px] sm:text-xs transition-colors">
+              {selectedRowIndexes.size > 0 && (
+                <button onClick={deleteSelectedRows} className="bg-red-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-red-700 text-[10px] sm:text-xs transition-colors shadow-sm animate-in fade-in zoom-in duration-200">
+                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete ({selectedRowIndexes.size})
+                </button>
+              )}
+              <button onClick={handleEditToggle} className="bg-gray-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-gray-700 text-[10px] sm:text-xs transition-colors">
                 <X className="w-3.5 h-3.5 mr-1" /> Cancel
               </button>
               <button onClick={handleSaveList} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-green-700 text-[10px] sm:text-xs transition-colors shadow-sm">
@@ -468,6 +498,16 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
           <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800/80 text-center">
               <tr>
+                {isEditMode && (
+                  <th className="px-2 py-1.5 w-10">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      checked={selectedRowIndexes.size === customRows.length && customRows.length > 0}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                )}
                 {isEditMode && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Move</th>}
                 <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Description</th>
                 {powerType !== 'SPH' && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Axis</th>}
@@ -485,12 +525,13 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 const delta = deltas[key] || 0;
                 const origQty = originalStock[key] || 0;
                 const isInsertMode = insertAt === index;
+                const isSelected = selectedRowIndexes.has(index);
 
                 return (
                   <React.Fragment key={rowKey}>
                     {isInsertMode && (
                       <tr className="bg-yellow-50 dark:bg-yellow-900/20">
-                        <td colSpan={isEditMode ? (powerType !== 'SPH' ? 6 : 5) : (powerType !== 'SPH' ? 5 : 4)} className="p-2">
+                        <td colSpan={isEditMode ? (powerType !== 'SPH' ? 7 : 6) : (powerType !== 'SPH' ? 5 : 4)} className="p-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <input type="number" step="0.25" placeholder="SPH" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.sph} onChange={(e) => setNewRowPower({ ...newRowPower, sph: e.target.value })} />
                             <input type="number" step="0.25" placeholder="CYL" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.cyl} onChange={(e) => setNewRowPower({ ...newRowPower, cyl: e.target.value })} />
@@ -510,10 +551,21 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                       onMouseLeave={(e) => { if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer); }}
                       onTouchStart={(e) => { if (isEditMode) { const timer = setTimeout(() => initiateInsert(index), 700); (e.currentTarget as any)._holdTimer = timer; } }}
                       onTouchEnd={(e) => { if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer); }}
-                      className={`hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50 ${isEditMode ? 'cursor-pointer select-none' : ''}`}
+                      className={`hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50 ${isEditMode ? 'cursor-pointer select-none' : ''} ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20' : ''}`}
+                      onClick={() => isEditMode && toggleRowSelection(index)}
                     >
                       {isEditMode && (
-                        <td className="px-1 py-1.5 text-center">
+                        <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input 
+                            type="checkbox" 
+                            className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            checked={isSelected}
+                            onChange={() => toggleRowSelection(index)}
+                          />
+                        </td>
+                      )}
+                      {isEditMode && (
+                        <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
                           <div className="flex flex-col items-center gap-0.5">
                             <button onClick={() => moveRowUp(index)} disabled={index === 0} className={`p-0.5 rounded transition-colors ${index === 0 ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}>
                               <ChevronUp className="w-4 h-4" />
@@ -529,7 +581,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                         {name}
                       </td>
                       {powerType !== 'SPH' && (
-                        <td className="px-1 py-1.5 text-center">
+                        <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
                           <select disabled={isEditMode} value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [`${row.sph}-${row.cyl}-${row.add || ''}`]: parseInt(e.target.value) })} className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14 disabled:opacity-50">
                             <option value="">-</option>
                             {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
@@ -543,12 +595,12 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                       <td className="px-2 py-1.5 whitespace-nowrap text-right">
                         {!isEditMode ? (
                           <div className="flex justify-end gap-1">
-                            <button onClick={() => handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, -0.5)} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Minus className="w-6 h-6" /></button>
-                            <button onClick={() => handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, 0.5)} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"><Plus className="w-6 h-6" /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, -0.5); }} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Minus className="w-6 h-6" /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, 0.5); }} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"><Plus className="w-6 h-6" /></button>
                           </div>
                         ) : (
-                          <div className="flex justify-end gap-1">
-                            <button onClick={() => deleteRow(index)} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Trash2 className="w-6 h-6" /></button>
+                          <div className="flex justify-end gap-1 text-[10px] text-gray-400 italic">
+                            Select to delete
                           </div>
                         )}
                       </td>

@@ -6,7 +6,6 @@ import {
   MATERIALS,
   VISIONS,
   DEFAULT_COATINGS,
-  PROTECTED_COATINGS,
   formatLensName,
   Material,
   Vision,
@@ -19,7 +18,9 @@ import {
   saveCustomLensRows,
   CustomLensRow
 } from '../utils/lensUtils';
-import { Plus, Minus, Save, Edit2, Check, X, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Minus, Save, Edit2, Check, X, Trash2, ChevronUp, ChevronDown, Settings, Database } from 'lucide-react';
+
+const DB_PROTECTED = ['HC', 'HMC', 'Bluecut Green'];
 
 export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -38,6 +39,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       return saved ? JSON.parse(saved) : DEFAULT_COATINGS;
     } catch { return DEFAULT_COATINGS; }
   });
+  const [isEditingCoatings, setIsEditingCoatings] = useState(false);
+  const [savingCoatings, setSavingCoatings] = useState(false);
   const [deltas, setDeltas] = useState<Record<string, number>>({});
   const [originalStock, setOriginalStock] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
@@ -46,15 +49,43 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [newRowPower, setNewRowPower] = useState({ sph: '', cyl: '', add: '' });
   const [insertAt, setInsertAt] = useState<number | null>(null);
 
+  useEffect(() => { fetchCoatingsFromDB(); }, []);
+
+  async function fetchCoatingsFromDB() {
+    try {
+      const { data } = await supabase.from('app_settings').select('value').eq('key', 'available_coatings').single();
+      if (data?.value) {
+        const c = data.value as string[];
+        setAvailableCoatings(c);
+        localStorage.setItem('availableCoatings', JSON.stringify(c));
+      }
+    } catch {}
+  }
+
+  async function saveCoatingsToDB() {
+    setSavingCoatings(true);
+    try {
+      const { error } = await supabase.from('app_settings').upsert(
+        { key: 'available_coatings', value: availableCoatings },
+        { onConflict: 'key' }
+      );
+      if (!error) {
+        localStorage.setItem('availableCoatings', JSON.stringify(availableCoatings));
+        alert('Coatings saved to database!');
+        setIsEditingCoatings(false);
+      } else {
+        alert('Failed to save: ' + error.message);
+      }
+    } catch { alert('Error saving coatings.'); }
+    finally { setSavingCoatings(false); }
+  }
+
   useEffect(() => {
     async function loadRows() {
       setLoading(true);
       const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
-      if (custom) {
-        setCustomRows(custom);
-      } else {
-        setCustomRows(generateLensRows(powerType, compoundLimit, vision));
-      }
+      if (custom) setCustomRows(custom);
+      else setCustomRows(generateLensRows(powerType, compoundLimit, vision));
       setLoading(false);
     }
     loadRows();
@@ -70,67 +101,41 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         newAxes[`${row.sph}-${row.cyl}-${row.add || ''}-${index}`] = defaultAxis;
       });
       setRowAxes(newAxes);
-    } else {
-      setRowAxes({});
-    }
+    } else { setRowAxes({}); }
   }, [vision, sign, powerType, lensRows]);
 
   useEffect(() => {
     async function fetchShops() {
       if (isDemo) {
-        const demoShops = [
-          { id: '1', name: 'SS Opticals' },
-          { id: '2', name: 'Narbada Eye Care' }
-        ];
-        setShops(demoShops);
-        setSelectedShop(demoShops[0].id);
-        return;
+        const demoShops = [{ id: '1', name: 'SS Opticals' }, { id: '2', name: 'Narbada Eye Care' }];
+        setShops(demoShops); setSelectedShop(demoShops[0].id); return;
       }
       const { data } = await supabase.from('shops').select('*');
-      if (data && data.length > 0) {
-        setShops(data);
-        setSelectedShop(data[0].id);
-      }
+      if (data && data.length > 0) { setShops(data); setSelectedShop(data[0].id); }
     }
     fetchShops();
   }, [isDemo]);
 
   useEffect(() => {
-    if (selectedShop && !isDemo) {
-      fetchStock();
-    }
+    if (selectedShop && !isDemo) fetchStock();
     setDeltas({});
   }, [selectedShop, material, vision, coatings, sign, powerType, compoundLimit, isDemo]);
 
   async function fetchStock() {
     setLoading(true);
     try {
-      let query = supabase
-        .from('lens_stock')
-        .select('*')
-        .eq('shop_id', selectedShop)
-        .eq('material', material)
-        .eq('vision', vision)
-        .eq('sign', sign)
-        .eq('power_type', powerType);
-
+      let query = supabase.from('lens_stock').select('*')
+        .eq('shop_id', selectedShop).eq('material', material)
+        .eq('vision', vision).eq('sign', sign).eq('power_type', powerType);
       query = query.eq('coatings', `{${coatings.join(',')}}`);
-
-      if (powerType === 'SPH') {
-        query = query.eq('cyl', 0);
-      } else if (powerType === 'CYL') {
-        query = query.gt('cyl', 0).lte('cyl', 6.0);
-      } else {
-        if (compoundLimit === '2.0') {
-          query = query.gte('cyl', 0.25).lte('cyl', 2.0);
-        } else {
-          query = query.gte('cyl', 2.25).lte('cyl', 4.0);
-        }
+      if (powerType === 'SPH') { query = query.eq('cyl', 0); }
+      else if (powerType === 'CYL') { query = query.gt('cyl', 0).lte('cyl', 6.0); }
+      else {
+        if (compoundLimit === '2.0') { query = query.gte('cyl', 0.25).lte('cyl', 2.0); }
+        else { query = query.gte('cyl', 2.25).lte('cyl', 4.0); }
       }
-
       const { data, error } = await query;
       if (error) throw error;
-
       const stockMap: Record<string, number> = {};
       if (data) {
         data.forEach((item) => {
@@ -141,95 +146,59 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         });
       }
       setOriginalStock(stockMap);
-    } catch (error) {
-      console.error("Fetch error:", error);
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { console.error("Fetch error:", error); }
+    finally { setLoading(false); }
   }
 
   const handleQuantityChange = (sph: string, cyl: string, axis: number | undefined, add: string | undefined, delta: number) => {
     const key = `${parseFloat(sph).toFixed(2)}:${parseFloat(cyl).toFixed(2)}:${axis || ''}:${add || ''}`;
-    const currentDelta = deltas[key] || 0;
-    setDeltas({ ...deltas, [key]: currentDelta + delta });
+    setDeltas({ ...deltas, [key]: (deltas[key] || 0) + delta });
   };
 
   const saveStock = async () => {
-    if (isDemo) {
-      alert('Demo Mode: Stock changes are not saved to the database.');
-      return;
-    }
+    if (isDemo) { alert('Demo Mode: Stock changes are not saved.'); return; }
     const entries = Object.entries(deltas).filter(([_, d]) => d !== 0);
     if (entries.length === 0) { alert('No changes to save.'); return; }
-
     setLoading(true);
-    let updatedCount = 0;
-    let lastError = null;
-
+    let updatedCount = 0; let lastError = null;
     for (const [key, delta] of entries) {
       const [sphStr, cylStr, axisStr, addStr] = key.split(':');
-      const currentQty = originalStock[key] || 0;
-      const newQty = Math.max(0, currentQty + delta);
-
-      const update = {
-        shop_id: selectedShop,
-        material,
-        vision,
-        sign,
-        power_type: powerType,
-        sph: parseFloat(sphStr),
-        cyl: parseFloat(cylStr),
+      const newQty = Math.max(0, (originalStock[key] || 0) + delta);
+      const { error } = await supabase.from('lens_stock').upsert({
+        shop_id: selectedShop, material, vision, sign, power_type: powerType,
+        sph: parseFloat(sphStr), cyl: parseFloat(cylStr),
         axis: axisStr ? parseInt(axisStr) : null,
         addition: addStr ? parseFloat(addStr) : null,
-        coatings,
-        quantity: newQty
-      };
-
-      const { error } = await supabase.from('lens_stock').upsert(update, {
-        onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings'
-      });
-      if (error) { console.error("Save error:", error); lastError = error; }
-      else { updatedCount++; }
+        coatings, quantity: newQty
+      }, { onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings' });
+      if (error) { lastError = error; } else { updatedCount++; }
     }
-
     setLoading(false);
-    if (updatedCount > 0) {
-      alert(`Stock updated successfully! (${updatedCount} items)`);
-      await fetchStock();
-      setDeltas({});
-    } else if (lastError) {
-      alert('Failed to save changes. Error: ' + (lastError as any).message);
-    } else {
-      alert('No changes were applied.');
-    }
+    if (updatedCount > 0) { alert(`Stock updated! (${updatedCount} items)`); await fetchStock(); setDeltas({}); }
+    else if (lastError) { alert('Failed: ' + (lastError as any).message); }
   };
 
   const toggleCoating = (c: string) => {
+    if (isEditingCoatings) return;
     if (c === 'Photo Grey') {
-      if (coatings.includes(c)) { setCoatings(coatings.filter(item => item !== c)); }
-      else { setCoatings([...coatings, c]); }
+      setCoatings(coatings.includes(c) ? coatings.filter(i => i !== c) : [...coatings, c]);
     } else {
-      const photoGreySelected = coatings.includes('Photo Grey');
-      setCoatings(photoGreySelected ? ['Photo Grey', c] : [c]);
+      const pg = coatings.includes('Photo Grey');
+      setCoatings(pg ? ['Photo Grey', c] : [c]);
     }
   };
 
   const addCustomCoating = () => {
     if (customCoating && !availableCoatings.includes(customCoating)) {
-      const updated = [...availableCoatings, customCoating];
-      setAvailableCoatings(updated);
-      localStorage.setItem('availableCoatings', JSON.stringify(updated));
-      const photoGreySelected = coatings.includes('Photo Grey');
-      setCoatings(photoGreySelected ? ['Photo Grey', customCoating] : [customCoating]);
+      setAvailableCoatings([...availableCoatings, customCoating]);
       setCustomCoating('');
     }
   };
 
   const deleteCoating = (c: string) => {
-    const updated = availableCoatings.filter(item => item !== c);
-    setAvailableCoatings(updated);
-    localStorage.setItem('availableCoatings', JSON.stringify(updated));
-    setCoatings(coatings.filter(item => item !== c));
+    if (DB_PROTECTED.includes(c)) return;
+    setAvailableCoatings(availableCoatings.filter(i => i !== c));
+    setCoatings(coatings.filter(i => i !== c));
   };
 
   const handleEditToggle = () => {
@@ -248,95 +217,47 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     try {
       const oldRows = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings) || generateLensRows(powerType, compoundLimit, vision);
       const { success, error } = await saveCustomLensRows(material, vision, sign, powerType, compoundLimit, customRows, coatings);
-
-      if (!success) {
-        alert('Failed to save list: ' + (error as any).message);
-        return;
-      }
-
+      if (!success) { alert('Failed to save list: ' + (error as any).message); return; }
       const newKeys = new Set(customRows.map(r => `${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
       const deletedRows = oldRows.filter(r => !newKeys.has(`${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
-
-      if (deletedRows.length > 0) {
-        for (const row of deletedRows) {
-          let deleteQuery = supabase
-            .from('lens_stock')
-            .delete()
-            .eq('material', material)
-            .eq('vision', vision)
-            .eq('sign', sign)
-            .eq('power_type', powerType)
-            .eq('sph', parseFloat(row.sph))
-            .eq('cyl', parseFloat(row.cyl))
-            .filter('coatings', 'eq', `{${coatings.join(',')}}`);
-
-          if (row.add) {
-            deleteQuery = deleteQuery.eq('addition', parseFloat(row.add));
-          } else {
-            deleteQuery = deleteQuery.is('addition', null);
-          }
-
-          const { error: delError } = await deleteQuery;
-          if (delError) console.error('Delete error:', delError);
-        }
+      for (const row of deletedRows) {
+        let dq = supabase.from('lens_stock').delete()
+          .eq('material', material).eq('vision', vision).eq('sign', sign)
+          .eq('power_type', powerType).eq('sph', parseFloat(row.sph))
+          .eq('cyl', parseFloat(row.cyl)).filter('coatings', 'eq', `{${coatings.join(',')}}`);
+        if (row.add) { dq = dq.eq('addition', parseFloat(row.add)); } else { dq = dq.is('addition', null); }
+        await dq;
       }
-
-      alert('List saved successfully!');
-      setIsEditMode(false);
-    } catch (e) {
-      console.error(e);
-      alert('An error occurred while saving.');
-    } finally {
-      setLoading(false);
-    }
+      alert('List saved!'); setIsEditMode(false);
+    } catch { alert('Error saving.'); }
+    finally { setLoading(false); }
   };
 
   const deleteRow = (index: number) => {
-    if (!window.confirm('Are you sure? Deleting this row will also delete its stock for all shops when you save.')) return;
-    const newRows = [...customRows];
-    newRows.splice(index, 1);
-    setCustomRows(newRows);
+    if (!window.confirm('Are you sure?')) return;
+    const newRows = [...customRows]; newRows.splice(index, 1); setCustomRows(newRows);
   };
-
   const moveRowUp = (index: number) => {
     if (index === 0) return;
-    const newRows = [...customRows];
-    const temp = newRows[index - 1];
-    newRows[index - 1] = newRows[index];
-    newRows[index] = temp;
-    setCustomRows(newRows);
+    const r = [...customRows]; [r[index - 1], r[index]] = [r[index], r[index - 1]]; setCustomRows(r);
   };
-
   const moveRowDown = (index: number) => {
     if (index === customRows.length - 1) return;
-    const newRows = [...customRows];
-    const temp = newRows[index + 1];
-    newRows[index + 1] = newRows[index];
-    newRows[index] = temp;
-    setCustomRows(newRows);
+    const r = [...customRows]; [r[index + 1], r[index]] = [r[index], r[index + 1]]; setCustomRows(r);
   };
-
   const initiateInsert = (index: number) => {
     setInsertAt(index);
     const row = customRows[index];
     setNewRowPower({ sph: row.sph, cyl: row.cyl, add: row.add || '' });
   };
-
   const confirmInsert = () => {
     if (insertAt === null) return;
-    const sph = parseFloat(newRowPower.sph);
-    const cyl = parseFloat(newRowPower.cyl);
+    const sph = parseFloat(newRowPower.sph); const cyl = parseFloat(newRowPower.cyl);
     const add = newRowPower.add ? parseFloat(newRowPower.add) : undefined;
-    if (isNaN(sph) || isNaN(cyl)) { alert('Please enter valid SPH and CYL numbers.'); return; }
-    if ((vision === 'KT' || vision === 'Prograssive') && (add === undefined || isNaN(add))) { alert('Please enter a valid ADD number.'); return; }
+    if (isNaN(sph) || isNaN(cyl)) { alert('Valid SPH and CYL needed.'); return; }
     const newRows = [...customRows];
-    newRows.splice(insertAt, 0, {
-      sph: sph.toFixed(2),
-      cyl: cyl.toFixed(2),
-      add: add !== undefined ? add.toFixed(2) : undefined
-    });
-    setCustomRows(newRows);
-    setInsertAt(null);
+    newRows.splice(insertAt, 0, { sph: sph.toFixed(2), cyl: cyl.toFixed(2), add: add !== undefined ? add.toFixed(2) : undefined });
+    setCustomRows(newRows); setInsertAt(null);
   };
 
   return (
@@ -419,8 +340,25 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
           )}
         </div>
 
+        {/* COATINGS SECTION */}
         <div>
-          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Coatings</label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Coatings</label>
+            <button
+              onClick={() => isEditingCoatings ? saveCoatingsToDB() : setIsEditingCoatings(true)}
+              disabled={savingCoatings}
+              className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all disabled:opacity-50 ${
+                isEditingCoatings
+                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+              }`}
+            >
+              {isEditingCoatings
+                ? <><Database className="w-3 h-3" /> {savingCoatings ? 'Saving...' : 'Save Coatings to Database'}</>
+                : <><Settings className="w-3 h-3" /> Edit Coatings</>
+              }
+            </button>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1.5">
               {availableCoatings.map(c => (
@@ -428,17 +366,15 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                   <button
                     onClick={() => toggleCoating(c)}
                     className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${
-                      coatings.includes(c)
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                        : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'
-                    } ${!PROTECTED_COATINGS.includes(c) ? 'pr-5' : ''}`}
+                      coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'
+                    } ${isEditingCoatings && !DB_PROTECTED.includes(c) ? 'pr-5' : ''}`}
                   >
                     {c}
                   </button>
-                  {!PROTECTED_COATINGS.includes(c) && (
+                  {isEditingCoatings && !DB_PROTECTED.includes(c) && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); deleteCoating(c); }}
-                      className={`absolute right-1 transition-colors ${coatings.includes(c) ? 'text-indigo-200 hover:text-white' : 'text-gray-400 hover:text-red-500'}`}
+                      onClick={() => deleteCoating(c)}
+                      className="absolute right-1 text-gray-400 hover:text-red-500 transition-colors"
                       title="Delete coating"
                     >
                       <X className="w-3 h-3" />
@@ -447,11 +383,27 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 </div>
               ))}
             </div>
-            <div className="flex items-center gap-1.5 ml-auto">
-              <input type="text" value={customCoating} onChange={(e) => setCustomCoating(e.target.value)} placeholder="Add coating..." className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all" />
-              <button onClick={addCustomCoating} className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 p-1 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
-            </div>
+            {isEditingCoatings && (
+              <div className="flex items-center gap-1.5 ml-auto">
+                <input
+                  type="text"
+                  value={customCoating}
+                  onChange={(e) => setCustomCoating(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addCustomCoating()}
+                  placeholder="Add coating..."
+                  className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+                <button onClick={addCustomCoating} className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 p-1 rounded-md hover:bg-indigo-200 transition-colors">
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
+          {isEditingCoatings && (
+            <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5">
+              ⚠️ HC, HMC, Bluecut Green protected hain — delete nahi ho sakte. "Save Coatings to Database" click karo changes save karne ke liye.
+            </p>
+          )}
         </div>
       </div>
 
@@ -477,7 +429,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 const delta = deltas[key] || 0;
                 const origQty = originalStock[key] || 0;
                 const isInsertMode = insertAt === index;
-
                 return (
                   <React.Fragment key={rowKey}>
                     {isInsertMode && (
@@ -486,9 +437,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                           <div className="flex flex-wrap items-center gap-2">
                             <input type="number" step="0.25" placeholder="SPH" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.sph} onChange={(e) => setNewRowPower({ ...newRowPower, sph: e.target.value })} />
                             <input type="number" step="0.25" placeholder="CYL" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.cyl} onChange={(e) => setNewRowPower({ ...newRowPower, cyl: e.target.value })} />
-                            {(vision === 'KT' || vision === 'Prograssive') && (
-                              <input type="number" step="0.25" placeholder="ADD" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.add} onChange={(e) => setNewRowPower({ ...newRowPower, add: e.target.value })} />
-                            )}
+                            {(vision === 'KT' || vision === 'Prograssive') && (<input type="number" step="0.25" placeholder="ADD" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.add} onChange={(e) => setNewRowPower({ ...newRowPower, add: e.target.value })} />)}
                             <button onClick={confirmInsert} className="bg-green-600 text-white p-1 rounded"><Check className="w-4 h-4" /></button>
                             <button onClick={() => setInsertAt(null)} className="bg-red-600 text-white p-1 rounded"><X className="w-4 h-4" /></button>
                           </div>
@@ -507,18 +456,13 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                       {isEditMode && (
                         <td className="px-1 py-1.5 text-center">
                           <div className="flex flex-col items-center gap-0.5">
-                            <button onClick={() => moveRowUp(index)} disabled={index === 0} className={`p-0.5 rounded transition-colors ${index === 0 ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}>
-                              <ChevronUp className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => moveRowDown(index)} disabled={index === customRows.length - 1} className={`p-0.5 rounded transition-colors ${index === customRows.length - 1 ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}>
-                              <ChevronDown className="w-4 h-4" />
-                            </button>
+                            <button onClick={() => moveRowUp(index)} disabled={index === 0} className={`p-0.5 rounded transition-colors ${index === 0 ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}><ChevronUp className="w-4 h-4" /></button>
+                            <button onClick={() => moveRowDown(index)} disabled={index === customRows.length - 1} className={`p-0.5 rounded transition-colors ${index === customRows.length - 1 ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}><ChevronDown className="w-4 h-4" /></button>
                           </div>
                         </td>
                       )}
                       <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300 select-none">
-                        {isEditMode && <span className="mr-2 text-gray-400">☰</span>}
-                        {name}
+                        {isEditMode && <span className="mr-2 text-gray-400">☰</span>}{name}
                       </td>
                       {powerType !== 'SPH' && (
                         <td className="px-1 py-1.5 text-center">

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { ShoppingCart, Store, ChevronRight, FileText, Bell, ChevronLeft, AlertTriangle, Calendar, RefreshCw } from 'lucide-react';
-import { Shop, sortLensNames, MATERIALS, VISIONS, generateLensRows, fetchCustomLensRows, getDefaultAxis, KT_AXIS, PROGRESSIVE_AXIS, Material, Vision, PowerType, Sign } from '../utils/lensUtils';
+import { Store, ChevronRight, FileText, Bell, ChevronLeft, AlertTriangle, Calendar, RefreshCw, PackagePlus, Check, Loader2 } from 'lucide-react';
+import { Shop, sortLensNames, getDefaultAxis, KT_AXIS, PROGRESSIVE_AXIS, Material, Vision, PowerType, Sign } from '../utils/lensUtils';
 
 interface LowStockItem {
   lens_name: string;
@@ -25,7 +25,6 @@ type AlertView = 'main' | 'combined' | 'individual';
 type IndividualShop = { id: string; name: string } | null;
 type MainView = 'dashboard' | 'combined-orders';
 
-// Qty ko readable format mein dikhao (no HTML)
 function formatQty(qty: number): string {
   const whole = Math.floor(qty);
   const frac = qty % 1;
@@ -33,12 +32,60 @@ function formatQty(qty: number): string {
   return qty % 1 === 0 ? qty.toString() : qty.toFixed(2);
 }
 
+// lens_stock mein name se row dhundh ke quantity add karo
+async function addQtyToStockByName(shopId: string, lensName: string, qty: number): Promise<{ ok: boolean; msg: string }> {
+  // Fetch all lens_stock rows for this shop
+  const { data, error } = await supabase
+    .from('lens_stock')
+    .select('id, quantity')
+    .eq('shop_id', shopId);
+
+  if (error) return { ok: false, msg: error.message };
+  if (!data?.length) return { ok: false, msg: 'Is shop ki lens_stock mein koi entry nahi.' };
+
+  // Build name for each row same way as ReportsPage buildStockName
+  function buildName(item: any): string {
+    const coating = Array.isArray(item.coatings) ? item.coatings.join(' ') : '';
+    const sign = item.sign || '';
+    let power = '';
+    if (item.power_type === 'SPH') power = Number(item.sph) === 0 ? 'Plano' : `${sign}${parseFloat(item.sph).toFixed(2)} SPH`;
+    else if (item.power_type === 'CYL') power = `${sign}${parseFloat(item.cyl).toFixed(2)} CYL`;
+    else if (item.power_type === 'Compound') power = `${sign}${parseFloat(item.sph).toFixed(2)}/${sign}${parseFloat(item.cyl).toFixed(2)}`;
+    else if (item.power_type === 'Cross Compound') {
+      const opp = sign === '+' ? '-' : '+';
+      power = `${sign}${parseFloat(item.sph).toFixed(2)}/${opp}${parseFloat(item.cyl).toFixed(2)}`;
+    }
+    const mat = item.material === 'CR' ? '' : item.material;
+    const vis = item.vision === 'single vision' ? '' : item.vision;
+    const add = item.addition ? `ADD +${parseFloat(item.addition).toFixed(2)}` : '';
+    const axis = item.axis ? `AXIS ${item.axis}` : '';
+    return [power, add, axis, coating, mat, vis].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  }
+
+  // Fetch full rows to build names
+  const { data: fullRows } = await supabase
+    .from('lens_stock')
+    .select('*')
+    .eq('shop_id', shopId);
+
+  const matched = (fullRows || []).find(row => buildName(row) === lensName);
+  if (!matched) return { ok: false, msg: `Lens "${lensName}" stock mein nahi mila.` };
+
+  const newQty = Number(matched.quantity) + qty;
+  const { error: updateError } = await supabase
+    .from('lens_stock')
+    .update({ quantity: newQty })
+    .eq('id', matched.id);
+
+  if (updateError) return { ok: false, msg: updateError.message };
+  return { ok: true, msg: '' };
+}
+
 export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShop, setSelectedShop] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Main view toggle
   const [mainView, setMainView] = useState<MainView>('dashboard');
 
   // Date-wise grouped orders (individual shop)
@@ -59,6 +106,15 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   const [selectedIndividualShop, setSelectedIndividualShop] = useState<IndividualShop>(null);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [alertLoading, setAlertLoading] = useState(false);
+
+  // ─── EDIT & ADD TO STOCK states ────────────────────────────────
+  // editStockMode: which date+type is in edit mode ('combined-DATE' or 'shop-SHOPID-DATE')
+  const [editStockMode, setEditStockMode] = useState<string | null>(null);
+  // editedQtys: { lensName: qty } — user-modified quantities
+  const [editedQtys, setEditedQtys] = useState<Record<string, number>>({});
+  const [stockUpdateLoading, setStockUpdateLoading] = useState(false);
+  // stockUpdateShop: for combined view, which shop to update stock for
+  const [stockUpdateShop, setStockUpdateShop] = useState<string>('');
 
   useEffect(() => {
     async function fetchShops() {
@@ -128,7 +184,6 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     setDateOrdersLoading(false);
   }
 
-  // Combined orders — date groups (dono shops)
   async function fetchCombinedDateGroups() {
     setCombinedLoading(true);
     const { data } = await supabase
@@ -156,7 +211,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     setSelectedCombinedDate(date);
     const { data } = await supabase
       .from('orders')
-      .select('lens_details, quantity')
+      .select('lens_details, quantity, shop_id')
       .gte('created_at', `${date}T00:00:00`)
       .lte('created_at', `${date}T23:59:59`);
     if (data) {
@@ -238,27 +293,27 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
 
   const totalAlerts = lowStockItems.length;
 
-  // ─── SYNQ DATABASE ─────────────────────────────────────────────
-  const [synqLoading, setSynqLoading] = useState(false);
+  // ─── SYNC DATABASE ─────────────────────────────────────────────
+  const [syncLoading, setSyncLoading] = useState(false);
 
-  const synqDatabase = async () => {
-    if (isDemo) { alert('Demo Mode: Synq not available.'); return; }
+  const syncDatabase = async () => {
+    if (isDemo) { alert('Demo Mode: Sync not available.'); return; }
     if (!window.confirm('Sabhi shops ke liye sabhi lens lists database mein sync hongi (naye rows quantity 0 se add honge, existing untouched rahenge). Continue?')) return;
 
-    setSynqLoading(true);
+    setSyncLoading(true);
     let insertedCount = 0;
     let errorCount = 0;
 
     try {
       const { data: shopsData } = await supabase.from('shops').select('*');
-      if (!shopsData?.length) { alert('Koi shop nahi mili.'); setSynqLoading(false); return; }
+      if (!shopsData?.length) { alert('Koi shop nahi mili.'); setSyncLoading(false); return; }
 
       const { data: allCustomRows } = await supabase
         .from('custom_lens_rows')
         .select('*')
         .order('sort_order', { ascending: true });
 
-      if (!allCustomRows?.length) { alert('custom_lens_rows mein koi data nahi.'); setSynqLoading(false); return; }
+      if (!allCustomRows?.length) { alert('custom_lens_rows mein koi data nahi.'); setSyncLoading(false); return; }
 
       for (const shop of shopsData) {
         for (const row of allCustomRows) {
@@ -297,20 +352,59 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                 ignoreDuplicates: true
               });
 
-            if (error) { errorCount++; console.error('Synq error:', error); }
+            if (error) { errorCount++; console.error('Sync error:', error); }
             else insertedCount++;
           }
         }
       }
 
-      alert(`Synq complete!\nProcessed: ${insertedCount} rows${errorCount > 0 ? `\nErrors: ${errorCount}` : ''}`);
+      alert(`Sync complete!\nProcessed: ${insertedCount} rows${errorCount > 0 ? `\nErrors: ${errorCount}` : ''}`);
     } catch (e) {
-      console.error('Synq failed:', e);
-      alert('Synq failed. Console check karo.');
+      console.error('Sync failed:', e);
+      alert('Sync failed. Console check karo.');
     } finally {
-      setSynqLoading(false);
+      setSyncLoading(false);
     }
   };
+
+  // ─── EDIT & ADD TO STOCK helpers ───────────────────────────────
+  function enterEditMode(modeKey: string, orders: { name: string; qty: number }[], defaultShopId?: string) {
+    setEditStockMode(modeKey);
+    const qtys: Record<string, number> = {};
+    orders.forEach(o => { qtys[o.name] = o.qty; });
+    setEditedQtys(qtys);
+    if (defaultShopId) setStockUpdateShop(defaultShopId);
+    else if (shops.length > 0) setStockUpdateShop(shops[0].id);
+  }
+
+  function cancelEditMode() {
+    setEditStockMode(null);
+    setEditedQtys({});
+  }
+
+  async function updateToStock(orders: { name: string; qty: number }[], shopId: string, modeKey: string) {
+    if (!shopId) { alert('Pehle shop select karo.'); return; }
+    if (isDemo) { alert('Demo Mode: Stock update not available.'); return; }
+    setStockUpdateLoading(true);
+    let ok = 0, fail = 0, failNames: string[] = [];
+
+    for (const order of orders) {
+      const qty = editedQtys[order.name] ?? order.qty;
+      if (qty <= 0) continue;
+      const result = await addQtyToStockByName(shopId, order.name, qty);
+      if (result.ok) ok++;
+      else { fail++; failNames.push(order.name); console.warn(result.msg); }
+    }
+
+    setStockUpdateLoading(false);
+    if (fail === 0) {
+      alert(`Stock updated! ${ok} lens${ok !== 1 ? 'es' : ''} ke liye quantity add ho gayi.`);
+      setEditStockMode(null);
+      setEditedQtys({});
+    } else {
+      alert(`${ok} updated, ${fail} failed:\n${failNames.slice(0, 5).join('\n')}${failNames.length > 5 ? '\n...' : ''}`);
+    }
+  }
 
   function formatDateDisplay(dateStr: string) {
     const d = new Date(dateStr);
@@ -440,12 +534,12 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     );
   }
 
-  // ─── COMBINED ORDERS VIEW (Last Combined Order button) ─────────
+  // ─── COMBINED ORDERS VIEW ──────────────────────────────────────
   if (mainView === 'combined-orders') {
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-3">
-          <button onClick={() => { setMainView('dashboard'); setSelectedCombinedDate(null); setCombinedDateOrders([]); }}
+          <button onClick={() => { setMainView('dashboard'); setSelectedCombinedDate(null); setCombinedDateOrders([]); cancelEditMode(); }}
             className="p-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition-colors">
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -464,59 +558,121 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
             <div className="py-10 text-center text-sm text-gray-400">Koi order nahi mila.</div>
           ) : (
             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-              {combinedDateGroups.map((group) => (
-                <li key={group.date}>
-                  <button
-                    onClick={() => selectedCombinedDate === group.date ? setSelectedCombinedDate(null) : fetchCombinedOrdersForDate(group.date)}
-                    className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors ${
-                      selectedCombinedDate === group.date
-                        ? 'bg-indigo-50 dark:bg-indigo-900/20'
-                        : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
-                    }`}>
-                    <div className="flex items-center gap-3">
-                      <Calendar className={`w-4 h-4 ${selectedCombinedDate === group.date ? 'text-indigo-500' : 'text-gray-400'}`} />
-                      <div>
-                        <p className={`text-sm font-semibold ${selectedCombinedDate === group.date ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300'}`}>
-                          {formatDateDisplay(group.date)}
-                        </p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">
-                          {group.count} order{group.count !== 1 ? 's' : ''} · Total: {formatQty(group.totalQty)} pair
-                        </p>
+              {combinedDateGroups.map((group) => {
+                const modeKey = `combined-${group.date}`;
+                const isEditMode = editStockMode === modeKey;
+                return (
+                  <li key={group.date}>
+                    <button
+                      onClick={() => {
+                        if (selectedCombinedDate === group.date) { setSelectedCombinedDate(null); cancelEditMode(); }
+                        else { cancelEditMode(); fetchCombinedOrdersForDate(group.date); }
+                      }}
+                      className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors ${
+                        selectedCombinedDate === group.date
+                          ? 'bg-indigo-50 dark:bg-indigo-900/20'
+                          : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
+                      }`}>
+                      <div className="flex items-center gap-3">
+                        <Calendar className={`w-4 h-4 ${selectedCombinedDate === group.date ? 'text-indigo-500' : 'text-gray-400'}`} />
+                        <div>
+                          <p className={`text-sm font-semibold ${selectedCombinedDate === group.date ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                            {formatDateDisplay(group.date)}
+                          </p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            {group.count} order{group.count !== 1 ? 's' : ''} · Total: {formatQty(group.totalQty)} pair
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <ChevronRight className={`w-4 h-4 transition-transform ${selectedCombinedDate === group.date ? 'rotate-90 text-indigo-400' : 'text-gray-400'}`} />
-                  </button>
+                      <ChevronRight className={`w-4 h-4 transition-transform ${selectedCombinedDate === group.date ? 'rotate-90 text-indigo-400' : 'text-gray-400'}`} />
+                    </button>
 
-                  {selectedCombinedDate === group.date && (
-                    <div className="border-t border-indigo-100 dark:border-indigo-800/30 bg-indigo-50/30 dark:bg-indigo-900/10">
-                      {combinedDateOrdersLoading ? (
-                        <div className="py-6 text-center text-xs text-gray-400">Loading orders...</div>
-                      ) : combinedDateOrders.length === 0 ? (
-                        <div className="py-6 text-center text-xs text-gray-400">Koi order nahi mila.</div>
-                      ) : (
-                        <table className="w-full">
-                          <thead className="bg-indigo-50 dark:bg-indigo-900/20">
-                            <tr>
-                              <th className="px-4 py-2 text-left text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Lens Name</th>
-                              <th className="px-4 py-2 text-right text-[10px] font-bold text-indigo-500 uppercase tracking-wider w-24">Qty (Pair)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-indigo-100 dark:divide-indigo-800/20">
-                            {combinedDateOrders.map((order, i) => (
-                              <tr key={i} className="even:bg-indigo-50/50 dark:even:bg-indigo-900/10">
-                                <td className="px-4 py-2 text-xs text-gray-700 dark:text-gray-300 font-medium">{order.name}</td>
-                                <td className="px-4 py-2 text-right text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                                  {formatQty(order.qty)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                    </div>
-                  )}
-                </li>
-              ))}
+                    {selectedCombinedDate === group.date && (
+                      <div className="border-t border-indigo-100 dark:border-indigo-800/30 bg-indigo-50/30 dark:bg-indigo-900/10">
+                        {combinedDateOrdersLoading ? (
+                          <div className="py-6 text-center text-xs text-gray-400">Loading orders...</div>
+                        ) : combinedDateOrders.length === 0 ? (
+                          <div className="py-6 text-center text-xs text-gray-400">Koi order nahi mila.</div>
+                        ) : (
+                          <>
+                            {/* Edit & Add to Stock toolbar */}
+                            <div className="px-4 py-2.5 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-100 dark:border-indigo-800/30 flex flex-wrap items-center gap-2">
+                              {!isEditMode ? (
+                                <button
+                                  onClick={() => enterEditMode(modeKey, combinedDateOrders)}
+                                  className="flex items-center gap-1.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md transition-colors shadow-sm">
+                                  <PackagePlus className="w-3.5 h-3.5" /> Edit &amp; Add to Stock
+                                </button>
+                              ) : (
+                                <>
+                                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 mr-1">Shop:</span>
+                                  {shops.map(s => (
+                                    <button key={s.id} onClick={() => setStockUpdateShop(s.id)}
+                                      className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${
+                                        stockUpdateShop === s.id
+                                          ? 'bg-emerald-600 text-white border-emerald-600'
+                                          : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'
+                                      }`}>
+                                      {s.name}
+                                    </button>
+                                  ))}
+                                  <div className="ml-auto flex gap-2">
+                                    <button
+                                      onClick={() => updateToStock(combinedDateOrders, stockUpdateShop, modeKey)}
+                                      disabled={stockUpdateLoading}
+                                      className="flex items-center gap-1.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-md transition-colors shadow-sm">
+                                      {stockUpdateLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                      Update to Stock
+                                    </button>
+                                    <button onClick={cancelEditMode}
+                                      className="text-[11px] font-medium bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded-md transition-colors">
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+
+                            <table className="w-full">
+                              <thead className="bg-indigo-50 dark:bg-indigo-900/20">
+                                <tr>
+                                  <th className="px-4 py-2 text-left text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Lens Name</th>
+                                  <th className="px-4 py-2 text-right text-[10px] font-bold text-indigo-500 uppercase tracking-wider w-28">
+                                    {isEditMode ? 'Edit Qty' : 'Qty (Pair)'}
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-indigo-100 dark:divide-indigo-800/20">
+                                {combinedDateOrders.map((order, i) => (
+                                  <tr key={i} className="even:bg-indigo-50/50 dark:even:bg-indigo-900/10">
+                                    <td className="px-4 py-2 text-xs text-gray-700 dark:text-gray-300 font-medium">{order.name}</td>
+                                    <td className="px-4 py-2 text-right">
+                                      {isEditMode ? (
+                                        <input
+                                          type="number"
+                                          step="0.5"
+                                          min="0"
+                                          value={editedQtys[order.name] ?? order.qty}
+                                          onChange={(e) => setEditedQtys(prev => ({ ...prev, [order.name]: parseFloat(e.target.value) || 0 }))}
+                                          className="w-20 text-xs text-right bg-white dark:bg-gray-900 border border-emerald-400 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-emerald-700 dark:text-emerald-400"
+                                        />
+                                      ) : (
+                                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                                          {formatQty(order.qty)}
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -532,11 +688,11 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
         <div className="flex gap-2">
           {!isDemo && (
             <button
-              onClick={synqDatabase}
-              disabled={synqLoading}
+              onClick={syncDatabase}
+              disabled={syncLoading}
               className="flex items-center text-xs bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-md transition-colors">
-              <RefreshCw className={"w-3.5 h-3.5 mr-1" + (synqLoading ? " animate-spin" : "")} />
-              {synqLoading ? 'Syncing...' : 'Synq Database'}
+              <RefreshCw className={`w-3.5 h-3.5 mr-1${syncLoading ? ' animate-spin' : ''}`} />
+              {syncLoading ? 'Syncing...' : 'Sync Database'}
             </button>
           )}
           <button
@@ -614,57 +770,111 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
             <div className="py-10 text-center text-sm text-gray-400">Koi order nahi mila.</div>
           ) : (
             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-              {dateGroups.map((group) => (
-                <li key={group.date}>
-                  <button
-                    onClick={() => selectedDate === group.date ? setSelectedDate(null) : fetchOrdersForDate(selectedShop, group.date)}
-                    className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors ${
-                      selectedDate === group.date ? 'bg-indigo-50 dark:bg-indigo-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
-                    }`}>
-                    <div className="flex items-center gap-3">
-                      <Calendar className={`w-4 h-4 ${selectedDate === group.date ? 'text-indigo-500' : 'text-gray-400'}`} />
-                      <div>
-                        <p className={`text-sm font-semibold ${selectedDate === group.date ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300'}`}>
-                          {formatDateDisplay(group.date)}
-                        </p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">
-                          {group.count} order{group.count !== 1 ? 's' : ''} · Total: {formatQty(group.totalQty)} pair
-                        </p>
+              {dateGroups.map((group) => {
+                const modeKey = `shop-${selectedShop}-${group.date}`;
+                const isEditMode = editStockMode === modeKey;
+                return (
+                  <li key={group.date}>
+                    <button
+                      onClick={() => {
+                        if (selectedDate === group.date) { setSelectedDate(null); cancelEditMode(); }
+                        else { cancelEditMode(); fetchOrdersForDate(selectedShop, group.date); }
+                      }}
+                      className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors ${
+                        selectedDate === group.date ? 'bg-indigo-50 dark:bg-indigo-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
+                      }`}>
+                      <div className="flex items-center gap-3">
+                        <Calendar className={`w-4 h-4 ${selectedDate === group.date ? 'text-indigo-500' : 'text-gray-400'}`} />
+                        <div>
+                          <p className={`text-sm font-semibold ${selectedDate === group.date ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                            {formatDateDisplay(group.date)}
+                          </p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            {group.count} order{group.count !== 1 ? 's' : ''} · Total: {formatQty(group.totalQty)} pair
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <ChevronRight className={`w-4 h-4 transition-transform ${selectedDate === group.date ? 'rotate-90 text-indigo-400' : 'text-gray-400'}`} />
-                  </button>
+                      <ChevronRight className={`w-4 h-4 transition-transform ${selectedDate === group.date ? 'rotate-90 text-indigo-400' : 'text-gray-400'}`} />
+                    </button>
 
-                  {selectedDate === group.date && (
-                    <div className="border-t border-indigo-100 dark:border-indigo-800/30 bg-indigo-50/30 dark:bg-indigo-900/10">
-                      {dateOrdersLoading ? (
-                        <div className="py-6 text-center text-xs text-gray-400">Loading orders...</div>
-                      ) : dateOrders.length === 0 ? (
-                        <div className="py-6 text-center text-xs text-gray-400">Koi order nahi mila.</div>
-                      ) : (
-                        <table className="w-full">
-                          <thead className="bg-indigo-50 dark:bg-indigo-900/20">
-                            <tr>
-                              <th className="px-4 py-2 text-left text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Lens Name</th>
-                              <th className="px-4 py-2 text-right text-[10px] font-bold text-indigo-500 uppercase tracking-wider w-24">Qty (Pair)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-indigo-100 dark:divide-indigo-800/20">
-                            {dateOrders.map((order, i) => (
-                              <tr key={i} className="even:bg-indigo-50/50 dark:even:bg-indigo-900/10">
-                                <td className="px-4 py-2 text-xs text-gray-700 dark:text-gray-300 font-medium">{order.name}</td>
-                                <td className="px-4 py-2 text-right text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                                  {formatQty(order.qty)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                    </div>
-                  )}
-                </li>
-              ))}
+                    {selectedDate === group.date && (
+                      <div className="border-t border-indigo-100 dark:border-indigo-800/30 bg-indigo-50/30 dark:bg-indigo-900/10">
+                        {dateOrdersLoading ? (
+                          <div className="py-6 text-center text-xs text-gray-400">Loading orders...</div>
+                        ) : dateOrders.length === 0 ? (
+                          <div className="py-6 text-center text-xs text-gray-400">Koi order nahi mila.</div>
+                        ) : (
+                          <>
+                            {/* Edit & Add to Stock toolbar */}
+                            <div className="px-4 py-2.5 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-100 dark:border-indigo-800/30 flex items-center gap-2">
+                              {!isEditMode ? (
+                                <button
+                                  onClick={() => enterEditMode(modeKey, dateOrders, selectedShop)}
+                                  className="flex items-center gap-1.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md transition-colors shadow-sm">
+                                  <PackagePlus className="w-3.5 h-3.5" /> Edit &amp; Add to Stock
+                                </button>
+                              ) : (
+                                <div className="flex items-center gap-2 w-full">
+                                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                                    {shops.find(s => s.id === selectedShop)?.name}
+                                  </span>
+                                  <div className="ml-auto flex gap-2">
+                                    <button
+                                      onClick={() => updateToStock(dateOrders, selectedShop, modeKey)}
+                                      disabled={stockUpdateLoading}
+                                      className="flex items-center gap-1.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-md transition-colors shadow-sm">
+                                      {stockUpdateLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                      Update to Stock
+                                    </button>
+                                    <button onClick={cancelEditMode}
+                                      className="text-[11px] font-medium bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded-md transition-colors">
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            <table className="w-full">
+                              <thead className="bg-indigo-50 dark:bg-indigo-900/20">
+                                <tr>
+                                  <th className="px-4 py-2 text-left text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Lens Name</th>
+                                  <th className="px-4 py-2 text-right text-[10px] font-bold text-indigo-500 uppercase tracking-wider w-28">
+                                    {isEditMode ? 'Edit Qty' : 'Qty (Pair)'}
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-indigo-100 dark:divide-indigo-800/20">
+                                {dateOrders.map((order, i) => (
+                                  <tr key={i} className="even:bg-indigo-50/50 dark:even:bg-indigo-900/10">
+                                    <td className="px-4 py-2 text-xs text-gray-700 dark:text-gray-300 font-medium">{order.name}</td>
+                                    <td className="px-4 py-2 text-right">
+                                      {isEditMode ? (
+                                        <input
+                                          type="number"
+                                          step="0.5"
+                                          min="0"
+                                          value={editedQtys[order.name] ?? order.qty}
+                                          onChange={(e) => setEditedQtys(prev => ({ ...prev, [order.name]: parseFloat(e.target.value) || 0 }))}
+                                          className="w-20 text-xs text-right bg-white dark:bg-gray-900 border border-emerald-400 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-emerald-700 dark:text-emerald-400"
+                                        />
+                                      ) : (
+                                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                                          {formatQty(order.qty)}
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

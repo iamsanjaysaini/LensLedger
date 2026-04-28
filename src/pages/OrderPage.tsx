@@ -20,7 +20,7 @@ import {
   formatReportQty,
   sortLensNames
 } from '../utils/lensUtils';
-import { Plus, Minus, ShoppingCart, FileText, X } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, FileText, X, Loader2 } from 'lucide-react';
 
 export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -35,6 +35,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [customCoating, setCustomCoating] = useState('');
   const [customPower, setCustomPower] = useState('');
   const [customQty, setCustomQty] = useState('1.0');
+  const [customSaving, setCustomSaving] = useState(false);
   const [availableCoatings, setAvailableCoatings] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('availableCoatings');
@@ -135,6 +136,34 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     else if (lastError) { alert('Failed to save orders. Error: ' + (lastError as any).message); }
   };
 
+  // ✅ FIX 1: Custom power seedha DB mein save hota hai, list mein nahi dikhta
+  const saveCustomPowerDirectly = async () => {
+    if (!customPower.trim()) return;
+    const qty = parseFloat(customQty) || 1.0;
+    const name = customPower.trim();
+
+    if (isDemo) {
+      alert('Demo Mode: Custom orders are not saved.');
+      return;
+    }
+
+    setCustomSaving(true);
+    const { error } = await supabase.from('orders').insert({
+      shop_id: selectedShop,
+      lens_details: { name },
+      quantity: qty
+    });
+    setCustomSaving(false);
+
+    if (error) {
+      alert('Failed to save custom order: ' + error.message);
+    } else {
+      setCustomPower('');
+      setCustomQty('1.0');
+      alert(`"${name}" (${qty} pair) saved successfully!`);
+    }
+  };
+
   const toggleCoating = (c: string) => {
     if (c === 'Photo Grey') {
       if (coatings.includes(c)) { setCoatings(coatings.filter(item => item !== c)); }
@@ -154,16 +183,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       setCoatings(photoGreySelected ? ['Photo Grey', customCoating] : [customCoating]);
       setCustomCoating('');
     }
-  };
-
-  const addCustomPowerToOrder = () => {
-    if (!customPower.trim()) return;
-    const qty = parseFloat(customQty) || 1.0;
-    const name = customPower.trim();
-    const key = `custom-${selectedShop}-${name}-${Date.now()}`; // Unique key to allow multiple same-name entries if needed, or just use name
-    setDeltas({ ...deltas, [key]: { qty, name } });
-    setCustomPower('');
-    setCustomQty('1.0');
   };
 
   const deleteCoating = (c: string) => {
@@ -200,6 +219,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     const col2 = items.slice(MAX_ROWS_PER_COL);
     setLoading(false);
 
+    // ✅ FIX 2 & 3: Margins minimize + quantity fraction format fixed
     const win = window.open('', '_blank');
     if (win) {
       win.document.write(`
@@ -214,16 +234,16 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               .controls { padding: 8px 16px; display: flex; gap: 10px; justify-content: center; background: white; border-bottom: 1px solid #eee; }
               .btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; }
               .btn:hover { background: #4338ca; }
-              .page-container { background: white; width: 794px; min-height: 1123px; padding: 10mm; margin: 0 auto; }
-              .header { border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; font-size: 16px; }
-              .columns { display: flex; gap: 10px; }
+              .page-container { background: white; width: 794px; min-height: 1123px; padding: 6mm 4mm; margin: 0 auto; }
+              .header { border-bottom: 2px solid black; padding-bottom: 6px; margin-bottom: 10px; text-align: center; font-weight: bold; font-size: 14px; }
+              .columns { display: flex; gap: 6px; }
               .column { flex: 1; }
               table { width: 100%; border-collapse: collapse; }
-              td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
-              .qty-col { width: 40px; text-align: center; font-weight: bold; }
-              .frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; font-size: 0.7em; line-height: 1; margin-left: 2px; position: relative; top: -2px; }
-              .frac span { display: block; padding: 0 1px; }
-              .frac span.bottom { border-top: 1px solid black; }
+              td { border: 1px solid #ccc; padding: 3px 5px; text-align: left; line-height: 1.3; }
+              .qty-col { width: 36px; text-align: center; font-weight: bold; white-space: nowrap; }
+              .frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; font-size: 0.75em; line-height: 1; margin: 0 1px; }
+              .frac .num { display: block; border-bottom: 1px solid black; padding: 0 1px; line-height: 1.1; }
+              .frac .den { display: block; padding: 0 1px; line-height: 1.1; }
               @media print { .controls { display: none; } body { background: white; } }
             </style>
           </head>
@@ -237,12 +257,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               <div class="columns">
                 <div class="column">
                   <table><tbody>
-                    ${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
+                    ${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatQtyHTML(item[1])}</td></tr>`).join('')}
                   </tbody></table>
                 </div>
                 <div class="column">
                   <table><tbody>
-                    ${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatReportQty(item[1])}</td></tr>`).join('')}
+                    ${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatQtyHTML(item[1])}</td></tr>`).join('')}
                   </tbody></table>
                 </div>
               </div>
@@ -272,6 +292,17 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       win.document.close();
     }
   };
+
+  // ✅ FIX 3: Proper inline fraction HTML — num/den vertically stacked with border
+  function formatQtyHTML(qty: number): string {
+    const whole = Math.floor(qty);
+    const frac = qty % 1;
+    if (frac === 0.5) {
+      const wholePart = whole > 0 ? `${whole}` : '';
+      return `${wholePart}<span class="frac"><span class="num">1</span><span class="den">2</span></span>`;
+    }
+    return qty.toString();
+  }
 
   return (
     <div className="space-y-4">
@@ -371,33 +402,41 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           </div>
         </div>
 
+        {/* ✅ FIX 1: Custom power — seedha DB save, list mein nahi */}
         <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
-          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Custom Lens Power (Non-Stock)</label>
+          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
+            Custom Lens Power (Non-Stock)
+            <span className="ml-2 text-[10px] text-indigo-400 normal-case font-normal">— directly saves to order</span>
+          </label>
           <div className="flex gap-2">
-            <input 
-              type="text" 
-              value={customPower} 
-              onChange={(e) => setCustomPower(e.target.value)} 
-              placeholder="Enter power (e.g. +12.00 -4.50 x 90)" 
+            <input
+              type="text"
+              value={customPower}
+              onChange={(e) => setCustomPower(e.target.value)}
+              placeholder="Enter power (e.g. +12.00 -4.50 x 90)"
               className="flex-[3] text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-              onKeyPress={(e) => e.key === 'Enter' && addCustomPowerToOrder()}
+              onKeyPress={(e) => e.key === 'Enter' && saveCustomPowerDirectly()}
             />
             <div className="flex-[1] flex items-center bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-md px-2">
               <span className="text-[10px] font-bold text-gray-400 mr-1">QTY:</span>
-              <input 
-                type="number" 
+              <input
+                type="number"
                 step="0.5"
                 min="0.5"
-                value={customQty} 
-                onChange={(e) => setCustomQty(e.target.value)} 
+                value={customQty}
+                onChange={(e) => setCustomQty(e.target.value)}
                 className="w-full bg-transparent text-sm text-gray-900 dark:text-gray-100 focus:outline-none"
               />
             </div>
-            <button 
-              onClick={addCustomPowerToOrder}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center text-sm font-medium hover:bg-indigo-700 shadow-sm transition-colors"
+            <button
+              onClick={saveCustomPowerDirectly}
+              disabled={customSaving || !customPower.trim()}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center text-sm font-medium hover:bg-indigo-700 shadow-sm transition-colors disabled:opacity-50"
             >
-              <Plus className="w-4 h-4 mr-1" /> Add
+              {customSaving
+                ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Saving...</>
+                : <><ShoppingCart className="w-4 h-4 mr-1" /> Save</>
+              }
             </button>
           </div>
         </div>
@@ -415,44 +454,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {Object.entries(deltas)
-                .filter(([key]) => key.startsWith(`custom-${selectedShop}-`))
-                .map(([key, data]) => (
-                  <tr key={key} className="bg-indigo-50/30 dark:bg-indigo-900/10 hover:bg-indigo-100/50 dark:hover:bg-indigo-900/20 transition-colors">
-                    <td className="px-2 py-1.5 whitespace-nowrap text-xs font-bold text-indigo-700 dark:text-indigo-300">
-                      <span className="bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded mr-2 text-[10px] uppercase">Custom</span>
-                      {data.name}
-                    </td>
-                    {powerType !== 'SPH' && <td className="px-1 py-1.5 text-center text-gray-400">-</td>}
-                    <td className="px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold text-indigo-600 dark:text-indigo-400">{data.qty.toFixed(2)}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap text-right">
-                      <div className="flex justify-end gap-1">
-                        <button 
-                          onClick={() => {
-                            const newQty = Math.max(0, data.qty - 0.5);
-                            if (newQty === 0) {
-                              const newDeltas = { ...deltas };
-                              delete newDeltas[key];
-                              setDeltas(newDeltas);
-                            } else {
-                              setDeltas({ ...deltas, [key]: { ...data, qty: newQty } });
-                            }
-                          }} 
-                          className="p-1 rounded bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 transition-colors"
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => setDeltas({ ...deltas, [key]: { ...data, qty: data.qty + 0.5 } })} 
-                          className="p-1 rounded bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 transition-colors"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              }
               {lensRows.map((row, index) => {
                 const rowKey = `${row.sph}-${row.cyl}-${row.add || ''}-${index}`;
                 const rowAxis = rowAxes[rowKey];

@@ -303,9 +303,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
         }
       }
 
-      alert('Synq complete!
-✅ Processed: ' + insertedCount + ' rows' + (errorCount > 0 ? '
-⚠️ Errors: ' + errorCount : ''));
+      alert(`Synq complete!\nProcessed: ${insertedCount} rows${errorCount > 0 ? `\nErrors: ${errorCount}` : ''}`);
     } catch (e) {
       console.error('Synq failed:', e);
       alert('Synq failed. Console check karo.');

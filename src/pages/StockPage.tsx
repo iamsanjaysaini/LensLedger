@@ -204,8 +204,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     setLoading(false);
     if (updatedCount > 0) {
       alert(`Stock updated successfully! (${updatedCount} items)`);
-      await fetchStock();
+      // Clear original stock before refetch so UI doesn't show stale data
+      setOriginalStock({});
       setDeltas({});
+      await fetchStock();
     } else if (lastError) {
       alert('Failed to save changes. Error: ' + (lastError as any).message);
     } else {
@@ -582,7 +584,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                       </td>
                       {powerType !== 'SPH' && (
                         <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
-                          <select disabled={isEditMode} value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [`${row.sph}-${row.cyl}-${row.add || ''}`]: parseInt(e.target.value) })} className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14 disabled:opacity-50">
+                          <select disabled={isEditMode} value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [rowKey]: parseInt(e.target.value) })} className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14 disabled:opacity-50">
                             <option value="">-</option>
                             {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
                           </select>

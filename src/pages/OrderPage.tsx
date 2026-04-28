@@ -34,6 +34,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [rowAxes, setRowAxes] = useState<Record<string, number>>({});
   const [customCoating, setCustomCoating] = useState('');
   const [customPower, setCustomPower] = useState('');
+  const [customQty, setCustomQty] = useState('1.0');
   const [availableCoatings, setAvailableCoatings] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('availableCoatings');
@@ -157,14 +158,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const addCustomPowerToOrder = () => {
     if (!customPower.trim()) return;
-    const coatingPart = coatings.join(' ');
-    const materialPart = material === 'CR' ? '' : material;
-    const visionPart = vision === 'single vision' ? '' : vision;
-    const name = `${customPower.trim()} ${coatingPart} ${materialPart} ${visionPart}`.replace(/\s+/g, ' ').trim();
-    const key = `custom-${selectedShop}-${name}`;
-    const current = deltas[key] || { qty: 0, name };
-    setDeltas({ ...deltas, [key]: { qty: current.qty + 0.5, name } });
+    const qty = parseFloat(customQty) || 1.0;
+    const name = customPower.trim();
+    const key = `custom-${selectedShop}-${name}-${Date.now()}`; // Unique key to allow multiple same-name entries if needed, or just use name
+    setDeltas({ ...deltas, [key]: { qty, name } });
     setCustomPower('');
+    setCustomQty('1.0');
   };
 
   const deleteCoating = (c: string) => {
@@ -222,8 +221,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               table { width: 100%; border-collapse: collapse; }
               td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
               .qty-col { width: 40px; text-align: center; font-weight: bold; }
-              .frac { display: inline-block; vertical-align: middle; text-align: center; font-size: 0.8em; line-height: 1; margin-left: 2px; }
-              .frac span { display: block; padding: 0 2px; }
+              .frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; font-size: 0.7em; line-height: 1; margin-left: 2px; position: relative; top: -2px; }
+              .frac span { display: block; padding: 0 1px; }
               .frac span.bottom { border-top: 1px solid black; }
               @media print { .controls { display: none; } body { background: white; } }
             </style>
@@ -380,14 +379,25 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               value={customPower} 
               onChange={(e) => setCustomPower(e.target.value)} 
               placeholder="Enter power (e.g. +12.00 -4.50 x 90)" 
-              className="flex-1 text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+              className="flex-[3] text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
               onKeyPress={(e) => e.key === 'Enter' && addCustomPowerToOrder()}
             />
+            <div className="flex-[1] flex items-center bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-md px-2">
+              <span className="text-[10px] font-bold text-gray-400 mr-1">QTY:</span>
+              <input 
+                type="number" 
+                step="0.5"
+                min="0.5"
+                value={customQty} 
+                onChange={(e) => setCustomQty(e.target.value)} 
+                className="w-full bg-transparent text-sm text-gray-900 dark:text-gray-100 focus:outline-none"
+              />
+            </div>
             <button 
               onClick={addCustomPowerToOrder}
               className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center text-sm font-medium hover:bg-indigo-700 shadow-sm transition-colors"
             >
-              <Plus className="w-4 h-4 mr-1" /> Add to Order
+              <Plus className="w-4 h-4 mr-1" /> Add
             </button>
           </div>
         </div>

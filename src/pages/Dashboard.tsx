@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { ShoppingCart, Store, ChevronRight, FileText, Bell, ChevronLeft, AlertTriangle, Calendar } from 'lucide-react';
-import { Shop, sortLensNames } from '../utils/lensUtils';
+import { ShoppingCart, Store, ChevronRight, FileText, Bell, ChevronLeft, AlertTriangle, Calendar, RefreshCw } from 'lucide-react';
+import { Shop, sortLensNames, MATERIALS, VISIONS, generateLensRows, fetchCustomLensRows, getDefaultAxis, KT_AXIS, PROGRESSIVE_AXIS, Material, Vision, PowerType, Sign } from '../utils/lensUtils';
 
 interface LowStockItem {
   lens_name: string;
@@ -238,6 +238,82 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
 
   const totalAlerts = lowStockItems.length;
 
+  // ─── SYNQ DATABASE ─────────────────────────────────────────────
+  const [synqLoading, setSynqLoading] = useState(false);
+
+  const synqDatabase = async () => {
+    if (isDemo) { alert('Demo Mode: Synq not available.'); return; }
+    if (!window.confirm('Sabhi shops ke liye sabhi lens lists database mein sync hongi (naye rows quantity 0 se add honge, existing untouched rahenge). Continue?')) return;
+
+    setSynqLoading(true);
+    let insertedCount = 0;
+    let errorCount = 0;
+
+    try {
+      const { data: shopsData } = await supabase.from('shops').select('*');
+      if (!shopsData?.length) { alert('Koi shop nahi mili.'); setSynqLoading(false); return; }
+
+      const { data: allCustomRows } = await supabase
+        .from('custom_lens_rows')
+        .select('*')
+        .order('sort_order', { ascending: true });
+
+      if (!allCustomRows?.length) { alert('custom_lens_rows mein koi data nahi.'); setSynqLoading(false); return; }
+
+      for (const shop of shopsData) {
+        for (const row of allCustomRows) {
+          const sign = row.sign || null;
+          const powerType = row.power_type;
+          const vision = row.vision;
+          const coatings = row.coatings || [];
+
+          const defaultAxis = getDefaultAxis(vision, sign, powerType);
+          let axisValues: (number | null)[] = [null];
+          if (defaultAxis !== undefined) {
+            axisValues = [defaultAxis];
+          } else if (powerType !== 'SPH' && (vision === 'KT' || vision === 'Prograssive')) {
+            axisValues = vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS;
+          }
+
+          for (const axisVal of axisValues) {
+            const upsertData = {
+              shop_id: shop.id,
+              material: row.material,
+              vision,
+              sign,
+              power_type: powerType,
+              sph: parseFloat(row.sph),
+              cyl: parseFloat(row.cyl),
+              axis: axisVal,
+              addition: row.addition != null ? parseFloat(row.addition) : null,
+              coatings,
+              quantity: 0
+            };
+
+            const { error } = await supabase
+              .from('lens_stock')
+              .upsert(upsertData, {
+                onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings',
+                ignoreDuplicates: true
+              });
+
+            if (error) { errorCount++; console.error('Synq error:', error); }
+            else insertedCount++;
+          }
+        }
+      }
+
+      alert('Synq complete!
+✅ Processed: ' + insertedCount + ' rows' + (errorCount > 0 ? '
+⚠️ Errors: ' + errorCount : ''));
+    } catch (e) {
+      console.error('Synq failed:', e);
+      alert('Synq failed. Console check karo.');
+    } finally {
+      setSynqLoading(false);
+    }
+  };
+
   function formatDateDisplay(dateStr: string) {
     const d = new Date(dateStr);
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', weekday: 'short' });
@@ -455,11 +531,22 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-        <button
-          onClick={() => { setMainView('combined-orders'); fetchCombinedDateGroups(); }}
-          className="flex items-center text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md transition-colors">
-          <FileText className="w-4 h-4 mr-1" /> Last Combined Order
-        </button>
+        <div className="flex gap-2">
+          {!isDemo && (
+            <button
+              onClick={synqDatabase}
+              disabled={synqLoading}
+              className="flex items-center text-xs bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-md transition-colors">
+              <RefreshCw className={"w-3.5 h-3.5 mr-1" + (synqLoading ? " animate-spin" : "")} />
+              {synqLoading ? 'Syncing...' : 'Synq Database'}
+            </button>
+          )}
+          <button
+            onClick={() => { setMainView('combined-orders'); fetchCombinedDateGroups(); }}
+            className="flex items-center text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md transition-colors">
+            <FileText className="w-4 h-4 mr-1" /> Last Combined Order
+          </button>
+        </div>
       </div>
 
       {/* Alerts */}

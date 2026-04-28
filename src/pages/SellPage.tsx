@@ -120,6 +120,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     if (selectedShop && !isDemo) fetchStock();
     setDeltas({});
+    setOriginalStock({});  // Clear stale stock on filter change
   }, [selectedShop, material, vision, coatings, sign, powerType, compoundLimit, isDemo]);
 
   async function fetchStock() {
@@ -335,7 +336,12 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     }
 
     setLoading(false);
-    if (ok > 0) { alert(`Sales recorded! (${ok} items)`); await fetchStock(); setDeltas({}); }
+    if (ok > 0) {
+      alert(`Sales recorded! (${ok} items)`);
+      setOriginalStock({});  // Clear before refetch so UI refreshes properly
+      setDeltas({});
+      await fetchStock();
+    }
     else if (lastErr) alert('Failed: ' + (lastErr as any).message);
   };
 
@@ -516,6 +522,10 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-1">
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5, rowAxis, row.add)}
+                          className="p-3 rounded-md bg-gray-50 dark:bg-gray-900/40 text-gray-400 dark:text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors">
+                          <Plus className="w-6 h-6 rotate-45" />
+                        </button>
                         <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5, rowAxis, row.add)}
                           className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 transition-colors">
                           <Plus className="w-6 h-6" />

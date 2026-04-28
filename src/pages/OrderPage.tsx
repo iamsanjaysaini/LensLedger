@@ -228,19 +228,19 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             <title>Order Report - ${dateStr}</title>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
             <style>
-              @page { size: A4; margin: 0; }
+              @page { size: 210mm 297mm; margin: 0; }
               * { box-sizing: border-box; }
-              body { font-family: 'Courier New', Courier, monospace; font-size: 11px; margin: 0; padding: 0; background: white; }
+              body { font-family: 'Courier New', Courier, monospace; font-size: 10px; margin: 0; padding: 0; background: white; }
               .controls { padding: 8px 16px; display: flex; gap: 10px; justify-content: center; background: white; border-bottom: 1px solid #eee; }
               .btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; }
               .btn:hover { background: #4338ca; }
-              .page-container { background: white; width: 794px; min-height: 1123px; padding: 6mm 4mm; margin: 0 auto; }
-              .header { border-bottom: 2px solid black; padding-bottom: 6px; margin-bottom: 10px; text-align: center; font-weight: bold; font-size: 14px; }
-              .columns { display: flex; gap: 6px; }
+              .page-container { background: white; width: 595px; height: 842px; overflow: hidden; padding: 8px 6px; margin: 0 auto; }
+              .header { border-bottom: 2px solid black; padding-bottom: 4px; margin-bottom: 8px; text-align: center; font-weight: bold; font-size: 12px; }
+              .columns { display: flex; gap: 4px; }
               .column { flex: 1; }
               table { width: 100%; border-collapse: collapse; }
-              td { border: 1px solid #ccc; padding: 3px 5px; text-align: left; line-height: 1.3; }
-              .qty-col { width: 36px; text-align: center; font-weight: bold; white-space: nowrap; }
+              td { border: 1px solid #ccc; padding: 2px 4px; text-align: left; line-height: 1.2; }
+              .qty-col { width: 30px; text-align: center; font-weight: bold; white-space: nowrap; }
               .frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; font-size: 0.75em; line-height: 1; margin: 0 1px; }
               .frac .num { display: block; border-bottom: 1px solid black; padding: 0 1px; line-height: 1.1; }
               .frac .den { display: block; padding: 0 1px; line-height: 1.1; }
@@ -271,16 +271,18 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               function downloadJPG() {
                 const btn = document.querySelector('button[onclick="downloadJPG()"]');
                 if (btn) { btn.disabled = true; btn.innerText = 'Generating...'; }
-                const a4Width = 794; const a4Height = 1123;
-                html2canvas(document.querySelector("#capture"), { scale: 2, width: a4Width, height: a4Height, windowWidth: a4Width, windowHeight: a4Height }).then(canvas => {
-                  const finalCanvas = document.createElement('canvas');
-                  finalCanvas.width = a4Width * 2; finalCanvas.height = a4Height * 2;
-                  const ctx = finalCanvas.getContext('2d');
-                  ctx.fillStyle = 'white'; ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
-                  ctx.drawImage(canvas, 0, 0);
+                const a4Width = 595; const a4Height = 842;
+                html2canvas(document.querySelector("#capture"), {
+                  scale: 1,
+                  width: a4Width,
+                  height: a4Height,
+                  windowWidth: a4Width,
+                  windowHeight: a4Height,
+                  backgroundColor: '#ffffff'
+                }).then(canvas => {
                   const link = document.createElement('a');
                   link.download = 'Order_${dateStr.replace(/\//g, '-')}.jpg';
-                  link.href = finalCanvas.toDataURL('image/jpeg', 0.9);
+                  link.href = canvas.toDataURL('image/jpeg', 0.92);
                   link.click();
                   if (btn) { btn.disabled = false; btn.innerText = 'Download JPG'; }
                 });

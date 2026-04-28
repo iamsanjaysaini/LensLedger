@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   generateLensRows,
@@ -19,7 +19,7 @@ import {
   saveCustomLensRows,
   CustomLensRow
 } from '../utils/lensUtils';
-import { Plus, Minus, Save, Edit2, Check, X, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Minus, Save, Edit2, Check, X, Trash2, ChevronUp, ChevronDown, BellOff, Bell } from 'lucide-react';
 
 export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -54,6 +54,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [selectedRowIndexes, setSelectedRowIndexes] = useState<Set<number>>(new Set());
   const [newRowPower, setNewRowPower] = useState({ sph: '', cyl: '', add: '' });
   const [insertAt, setInsertAt] = useState<number | null>(null);
+  const [isIgnored, setIsIgnored] = useState(false);
+  const [ignoreLoading, setIgnoreLoading] = useState(false);
 
   useEffect(() => {
     async function loadRows() {
@@ -156,6 +158,53 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       setLoading(false);
     }
   }
+
+  const fetchIgnoreStatus = useCallback(async () => {
+    if (!selectedShop || isDemo) return;
+    const { data } = await supabase
+      .from('alert_ignores')
+      .select('id')
+      .eq('shop_id', selectedShop)
+      .eq('material', material)
+      .eq('vision', vision)
+      .eq('sign', sign)
+      .eq('power_type', powerType)
+      .filter('coatings', 'eq', `{${coatings.join(',')}}`)
+      .maybeSingle();
+    setIsIgnored(!!data);
+  }, [selectedShop, material, vision, sign, powerType, coatings, isDemo]);
+
+  useEffect(() => {
+    fetchIgnoreStatus();
+  }, [fetchIgnoreStatus]);
+
+  const toggleIgnore = async () => {
+    if (!selectedShop || isDemo) return;
+    setIgnoreLoading(true);
+    if (isIgnored) {
+      await supabase
+        .from('alert_ignores')
+        .delete()
+        .eq('shop_id', selectedShop)
+        .eq('material', material)
+        .eq('vision', vision)
+        .eq('sign', sign)
+        .eq('power_type', powerType)
+        .filter('coatings', 'eq', `{${coatings.join(',')}}`);
+      setIsIgnored(false);
+    } else {
+      await supabase.from('alert_ignores').insert({
+        shop_id: selectedShop,
+        material,
+        vision,
+        sign,
+        power_type: powerType,
+        coatings,
+      });
+      setIsIgnored(true);
+    }
+    setIgnoreLoading(false);
+  };
 
   const handleQuantityChange = (sph: string, cyl: string, axis: number | undefined, add: string | undefined, delta: number) => {
     const key = `${parseFloat(sph).toFixed(2)}:${parseFloat(cyl).toFixed(2)}:${axis || ''}:${add || ''}`;
@@ -381,6 +430,23 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         <div className="flex gap-2">
           {!isEditMode ? (
             <>
+              {!isDemo && (
+                <button
+                  onClick={toggleIgnore}
+                  disabled={ignoreLoading || !selectedShop}
+                  title={isIgnored ? 'Is list ko dobara alert mein dikhao' : 'Is list ko low stock alert mein ignore karo'}
+                  className={`px-3 py-1.5 rounded-md flex items-center text-[10px] sm:text-xs transition-colors disabled:opacity-50 border ${
+                    isIgnored
+                      ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-300 dark:border-orange-700 hover:bg-orange-100'
+                      : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {isIgnored
+                    ? <><BellOff className="w-3.5 h-3.5 mr-1" /> Ignored</>
+                    : <><Bell className="w-3.5 h-3.5 mr-1" /> Ignore Alert</>
+                  }
+                </button>
+              )}
               <button onClick={handleEditToggle} className="bg-indigo-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-indigo-700 text-[10px] sm:text-xs transition-colors">
                 <Edit2 className="w-3.5 h-3.5 mr-1" /> Edit List
               </button>

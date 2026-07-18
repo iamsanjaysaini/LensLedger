@@ -218,18 +218,25 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       return;
     }
 
+    const changedEntries = Object.entries(deltas).filter(([_, delta]) => delta !== 0);
+
+    if (changedEntries.length === 0) {
+      alert('No changes were made to save.');
+      return;
+    }
+
     setLoading(true);
     let updatedCount = 0;
     let lastError = null;
 
-    // Saari visible rows upsert karo (delta ho ya na ho)
-    for (const row of lensRows) {
-      const rowIndex = lensRows.indexOf(row);
-      const rowKey = `${row.sph}-${row.cyl}-${row.add || ''}-${rowIndex}`;
-      const rowAxis = rowAxes[rowKey];
-      const key = `${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}:${rowAxis || ''}:${row.add || ''}`;
+    for (const [key, delta] of changedEntries) {
+      const [sphStr, cylStr, axisStr, addStr] = key.split(':');
+      const sph = parseFloat(sphStr);
+      const cyl = parseFloat(cylStr);
+      const axis = axisStr ? parseInt(axisStr) : null;
+      const addition = addStr ? parseFloat(addStr) : null;
+
       const currentQty = originalStock[key] || 0;
-      const delta = deltas[key] || 0;
       const newQty = Math.max(0, currentQty + delta);
 
       const update = {
@@ -238,10 +245,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         vision,
         sign,
         power_type: powerType,
-        sph: parseFloat(row.sph),
-        cyl: parseFloat(row.cyl),
-        axis: rowAxis ? rowAxis : null,
-        addition: row.add ? parseFloat(row.add) : null,
+        sph,
+        cyl,
+        axis,
+        addition,
         coatings,
         quantity: newQty
       };
@@ -249,8 +256,12 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       const { error } = await supabase.from('lens_stock').upsert(update, {
         onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings'
       });
-      if (error) { console.error('Save error:', error); lastError = error; }
-      else { updatedCount++; }
+      if (error) {
+        console.error('Save error:', error);
+        lastError = error;
+      } else {
+        updatedCount++;
+      }
     }
 
     setLoading(false);
@@ -453,7 +464,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 <Edit2 className="w-3.5 h-3.5 mr-1" /> Edit List
               </button>
               <button onClick={saveStock} disabled={loading} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-green-700 disabled:opacity-50 text-[10px] sm:text-xs transition-colors shadow-sm">
-                <Save className="w-3.5 h-3.5 mr-1" /> Save Stock
+                <Save className="w-3.5 h-3.5 mr-1" /> Save changes
               </button>
             </>
           ) : (

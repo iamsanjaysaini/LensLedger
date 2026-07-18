@@ -237,18 +237,37 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
         .select('*, shops(name)')
         .lt('quantity', 1);
       const { data: ignoreData } = await supabase.from('alert_ignores').select('*');
-      const ignoreSet = new Set(
-        (ignoreData || []).map((ig: any) =>
-          `${ig.shop_id}|${ig.material}|${ig.vision}|${ig.sign || ''}|${ig.power_type}|${(ig.coatings || []).join(',')}`
-        )
-      );
+      const ignoreSetWhole = new Set<string>();
+      const ignoreSetSpecific = new Set<string>();
+
+      (ignoreData || []).forEach((ig: any) => {
+        const coatingsStr = (ig.coatings || []).join(',');
+        if (ig.sph === null && ig.cyl === null && ig.addition === null && ig.axis === null) {
+          ignoreSetWhole.add(`${ig.shop_id}|${ig.material}|${ig.vision}|${ig.sign || ''}|${ig.power_type}|${coatingsStr}`);
+        } else {
+          const sphStr = ig.sph !== null && ig.sph !== undefined ? parseFloat(ig.sph).toFixed(2) : '';
+          const cylStr = ig.cyl !== null && ig.cyl !== undefined ? parseFloat(ig.cyl).toFixed(2) : '';
+          const addStr = ig.addition !== null && ig.addition !== undefined ? parseFloat(ig.addition).toFixed(2) : '';
+          const axisStr = ig.axis !== null && ig.axis !== undefined ? String(ig.axis) : '';
+          ignoreSetSpecific.add(
+            `${ig.shop_id}|${ig.material}|${ig.vision}|${ig.sign || ''}|${ig.power_type}|${coatingsStr}|${sphStr}|${cylStr}|${addStr}|${axisStr}`
+          );
+        }
+      });
+
       const items: LowStockItem[] = [];
       (stockDataAll || []).forEach((item: any) => {
         const coatingsKey = (item.coatings || []).join(',');
         const ignoreKey = `${item.shop_id}|${item.material}|${item.vision}|${item.sign || ''}|${item.power_type}|${coatingsKey}`;
-        if (ignoreSet.has(ignoreKey)) return;
+
         const sph = parseFloat(item.sph).toFixed(2);
         const cyl = parseFloat(item.cyl).toFixed(2);
+        const addStr = item.addition ? parseFloat(item.addition).toFixed(2) : '';
+        const axisStr = item.axis && item.power_type !== 'SPH' ? String(item.axis) : '';
+        const specificKey = `${item.shop_id}|${item.material}|${item.vision}|${item.sign || ''}|${item.power_type}|${coatingsKey}|${sph}|${cyl}|${addStr}|${axisStr}`;
+
+        if (ignoreSetWhole.has(ignoreKey)) return;
+        if (ignoreSetSpecific.has(specificKey)) return;
         const sign = item.sign || '';
         const coatingsStr = (item.coatings || []).join(' ');
         const materialPart = item.material === 'CR' ? '' : item.material;

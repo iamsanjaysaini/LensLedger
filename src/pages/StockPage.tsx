@@ -464,7 +464,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 <Edit2 className="w-3.5 h-3.5 mr-1" /> Edit List
               </button>
               <button onClick={saveStock} disabled={loading} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-green-700 disabled:opacity-50 text-[10px] sm:text-xs transition-colors shadow-sm">
-                <Save className="w-3.5 h-3.5 mr-1" /> Save Stock
+                <Save className="w-3.5 h-3.5 mr-1" /> Save changes
               </button>
             </>
           ) : (

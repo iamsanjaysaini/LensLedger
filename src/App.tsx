@@ -16,10 +16,15 @@ function App() {
   const location = useLocation();
 
   useEffect(() => {
-    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_URL === 'https://placeholder-url.supabase.co') {
+    if (
+      window.location.search.includes('demo=true') ||
+      !import.meta.env.VITE_SUPABASE_URL ||
+      !import.meta.env.VITE_SUPABASE_ANON_KEY ||
+      import.meta.env.VITE_SUPABASE_URL === 'https://placeholder-url.supabase.co'
+    ) {
       console.warn("Supabase credentials missing or placeholder. App will run in demo mode.");
       setIsConfigured(false);
-      setSession({ user: { email: 'demo@example.com' } });
+      setSession({ user: { email: 'iamsanjaysaini@gmail.com' } });
       return;
     }
 

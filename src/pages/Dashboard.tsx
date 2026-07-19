@@ -13,12 +13,13 @@ interface LowStockItem {
   sign: string | null;
   power_type: string;
   coatings: string[];
+  alert_qty: number;
 }
 
 interface CombinedLowStockItem {
   lens_name: string;
   total_quantity: number;
-  shops: { shop_name: string; quantity: number }[];
+  shops: { shop_name: string; quantity: number; alert_qty: number }[];
 }
 
 type AlertView = 'main' | 'combined' | 'individual';
@@ -229,13 +230,53 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   }
 
   const fetchLowStockItems = useCallback(async () => {
-    if (isDemo) return;
+    if (isDemo) {
+      setLowStockItems([
+        {
+          lens_name: 'Plano HC',
+          shop_name: 'SS Opticals',
+          shop_id: '1',
+          quantity: 0.00,
+          material: 'CR',
+          vision: 'single vision',
+          sign: null,
+          power_type: 'SPH',
+          coatings: ['HC'],
+          alert_qty: 1.50
+        },
+        {
+          lens_name: '-0.50 SPH HC',
+          shop_name: 'SS Opticals',
+          shop_id: '1',
+          quantity: 1.00,
+          material: 'CR',
+          vision: 'single vision',
+          sign: '-',
+          power_type: 'SPH',
+          coatings: ['HC'],
+          alert_qty: 2.00
+        },
+        {
+          lens_name: '-0.25 SPH HC',
+          shop_name: 'Narbada Eye Care',
+          shop_id: '2',
+          quantity: 0.50,
+          material: 'CR',
+          vision: 'single vision',
+          sign: '-',
+          power_type: 'SPH',
+          coatings: ['HC'],
+          alert_qty: 1.00
+        }
+      ]);
+      setAlertLoading(false);
+      return;
+    }
     setAlertLoading(true);
     try {
       const { data: stockDataAll } = await supabase
         .from('lens_stock')
-        .select('*, shops(name)')
-        .lt('quantity', 1);
+        .select('*, shops(name)');
       const { data: ignoreData } = await supabase.from('alert_ignores').select('*');
       const ignoreSet = new Set(
         (ignoreData || []).map((ig: any) =>
@@ -247,6 +288,14 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
         const coatingsKey = (item.coatings || []).join(',');
         const ignoreKey = `${item.shop_id}|${item.material}|${item.vision}|${item.sign || ''}|${item.power_type}|${coatingsKey}`;
         if (ignoreSet.has(ignoreKey)) return;
+
+        const alertStatus = item.alert_status || 'ON';
+        const alertQty = item.alert_qty !== null && item.alert_qty !== undefined ? Number(item.alert_qty) : 0.00;
+        const qty = Number(item.quantity);
+
+        if (alertStatus !== 'ON') return;
+        if (qty >= alertQty) return;
+
         const sph = parseFloat(item.sph).toFixed(2);
         const cyl = parseFloat(item.cyl).toFixed(2);
         const sign = item.sign || '';
@@ -267,6 +316,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
           shop_id: item.shop_id, quantity: Number(item.quantity),
           material: item.material, vision: item.vision, sign: item.sign,
           power_type: item.power_type, coatings: item.coatings || [],
+          alert_qty: alertQty,
         });
       });
       setLowStockItems(items);
@@ -275,15 +325,15 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   }, [isDemo]);
 
   useEffect(() => {
-    if (alertView !== 'main') fetchLowStockItems();
-  }, [alertView, fetchLowStockItems]);
+    fetchLowStockItems();
+  }, [fetchLowStockItems]);
 
   const combinedLowStock: CombinedLowStockItem[] = (() => {
     const map: Record<string, CombinedLowStockItem> = {};
     lowStockItems.forEach(item => {
       if (!map[item.lens_name]) map[item.lens_name] = { lens_name: item.lens_name, total_quantity: 0, shops: [] };
       map[item.lens_name].total_quantity += item.quantity;
-      map[item.lens_name].shops.push({ shop_name: item.shop_name, quantity: item.quantity });
+      map[item.lens_name].shops.push({ shop_name: item.shop_name, quantity: item.quantity, alert_qty: item.alert_qty });
     });
     return Object.values(map).sort((a, b) => sortLensNames(a.lens_name, b.lens_name));
   })();
@@ -373,7 +423,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                       <td className="px-3 py-2 text-center text-xs font-bold text-orange-600">{formatQty(item.total_quantity)}</td>
                       <td className="px-3 py-2 text-[10px] text-gray-500">
                         {item.shops.map((s, j) => (
-                          <span key={j} className="mr-2">{s.shop_name}: <span className="font-semibold text-orange-500">{formatQty(s.quantity)}</span></span>
+                          <span key={j} className="mr-2">{s.shop_name}: <span className="font-semibold text-orange-500">{formatQty(s.quantity)} / {formatQty(s.alert_qty)}</span></span>
                         ))}
                       </td>
                     </tr>
@@ -443,14 +493,14 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                 <thead className="bg-gray-50 dark:bg-gray-800/80">
                   <tr>
                     <th className="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Lens</th>
-                    <th className="px-3 py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider w-24">Quantity</th>
+                    <th className="px-3 py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider w-36">Quantity</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {items.map((item, i) => (
                     <tr key={i} className="hover:bg-orange-50/40 even:bg-gray-50 dark:even:bg-gray-700/30">
                       <td className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300">{item.lens_name}</td>
-                      <td className="px-3 py-2 text-center text-xs font-bold text-orange-600">{formatQty(item.quantity)}</td>
+                      <td className="px-3 py-2 text-center text-xs font-bold text-orange-600">{formatQty(item.quantity)} / {formatQty(item.alert_qty)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -622,7 +672,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
       </div>
 
       {/* Alerts */}
-      {!isDemo && (
+      {true && (
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-orange-200 dark:border-orange-800/50 shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-orange-100 dark:border-orange-800/30 bg-orange-50 dark:bg-orange-900/10 flex items-center">
             <h3 className="text-sm font-semibold text-orange-700 dark:text-orange-400 flex items-center gap-2">

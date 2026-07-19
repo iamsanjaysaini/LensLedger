@@ -48,6 +48,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   });
   const [deltas, setDeltas] = useState<Record<string, number>>({});
   const [originalStock, setOriginalStock] = useState<Record<string, number>>({});
+  const [originalAlertQty, setOriginalAlertQty] = useState<Record<string, number>>({});
+  const [originalAlertStatus, setOriginalAlertStatus] = useState<Record<string, string>>({});
+  const [editedAlertQtys, setEditedAlertQtys] = useState<Record<string, number>>({});
+  const [editedAlertStatuses, setEditedAlertStatuses] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [customRows, setCustomRows] = useState<CustomLensRow[]>([]);
@@ -111,6 +115,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       fetchStock();
     }
     setDeltas({});
+    setEditedAlertQtys({});
+    setEditedAlertStatuses({});
   }, [selectedShop, material, vision, coatings, sign, powerType, compoundLimit, isDemo]);
 
   async function fetchStock() {
@@ -143,15 +149,21 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       if (error) throw error;
 
       const stockMap: Record<string, number> = {};
+      const alertQtyMap: Record<string, number> = {};
+      const alertStatusMap: Record<string, string> = {};
       if (data) {
         data.forEach((item) => {
           const axisVal = item.axis !== null && item.axis !== undefined ? item.axis : '';
           const addVal = item.addition !== null && item.addition !== undefined ? item.addition.toFixed(2) : '';
           const key = `${item.sph.toFixed(2)}:${item.cyl.toFixed(2)}:${axisVal}:${addVal}`;
           stockMap[key] = Number(item.quantity);
+          alertQtyMap[key] = item.alert_qty !== null && item.alert_qty !== undefined ? Number(item.alert_qty) : 0.00;
+          alertStatusMap[key] = item.alert_status !== null && item.alert_status !== undefined ? String(item.alert_status) : 'ON';
         });
       }
       setOriginalStock(stockMap);
+      setOriginalAlertQty(alertQtyMap);
+      setOriginalAlertStatus(alertStatusMap);
     } catch (error) {
       console.error("Fetch error:", error);
     } finally {
@@ -212,15 +224,35 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     setDeltas({ ...deltas, [key]: currentDelta + delta });
   };
 
+  const handleAlertQtyChange = (sph: string, cyl: string, axis: number | undefined, add: string | undefined, delta: number) => {
+    const key = `${parseFloat(sph).toFixed(2)}:${parseFloat(cyl).toFixed(2)}:${axis || ''}:${add || ''}`;
+    const origAlertQty = originalAlertQty[key] || 0.00;
+    const currentEdited = editedAlertQtys[key] !== undefined ? editedAlertQtys[key] : origAlertQty;
+    const newAlertQty = Math.max(0, currentEdited + delta);
+    setEditedAlertQtys({ ...editedAlertQtys, [key]: newAlertQty });
+  };
+
+  const handleAlertStatusToggle = (sph: string, cyl: string, axis: number | undefined, add: string | undefined) => {
+    const key = `${parseFloat(sph).toFixed(2)}:${parseFloat(cyl).toFixed(2)}:${axis || ''}:${add || ''}`;
+    const origAlertStatus = originalAlertStatus[key] || 'ON';
+    const currentEdited = editedAlertStatuses[key] !== undefined ? editedAlertStatuses[key] : origAlertStatus;
+    const newAlertStatus = currentEdited === 'ON' ? 'OFF' : 'ON';
+    setEditedAlertStatuses({ ...editedAlertStatuses, [key]: newAlertStatus });
+  };
+
   const saveStock = async () => {
     if (isDemo) {
       alert('Demo Mode: Stock changes are not saved to the database.');
       return;
     }
 
-    const changedEntries = Object.entries(deltas).filter(([_, delta]) => delta !== 0);
+    const allKeys = Array.from(new Set([
+      ...Object.keys(deltas).filter(k => deltas[k] !== 0),
+      ...Object.keys(editedAlertQtys).filter(k => editedAlertQtys[k] !== originalAlertQty[k]),
+      ...Object.keys(editedAlertStatuses).filter(k => editedAlertStatuses[k] !== originalAlertStatus[k])
+    ]));
 
-    if (changedEntries.length === 0) {
+    if (allKeys.length === 0) {
       alert('No changes were made to save.');
       return;
     }
@@ -229,7 +261,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     let updatedCount = 0;
     let lastError = null;
 
-    for (const [key, delta] of changedEntries) {
+    for (const key of allKeys) {
       const [sphStr, cylStr, axisStr, addStr] = key.split(':');
       const sph = parseFloat(sphStr);
       const cyl = parseFloat(cylStr);
@@ -237,7 +269,11 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       const addition = addStr ? parseFloat(addStr) : null;
 
       const currentQty = originalStock[key] || 0;
+      const delta = deltas[key] || 0;
       const newQty = Math.max(0, currentQty + delta);
+
+      const alertQty = editedAlertQtys[key] !== undefined ? editedAlertQtys[key] : (originalAlertQty[key] !== undefined ? originalAlertQty[key] : 0.00);
+      const alertStatus = editedAlertStatuses[key] !== undefined ? editedAlertStatuses[key] : (originalAlertStatus[key] !== undefined ? originalAlertStatus[key] : 'ON');
 
       const update = {
         shop_id: selectedShop,
@@ -250,7 +286,9 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         axis,
         addition,
         coatings,
-        quantity: newQty
+        quantity: newQty,
+        alert_qty: alertQty,
+        alert_status: alertStatus
       };
 
       const { error } = await supabase.from('lens_stock').upsert(update, {
@@ -268,7 +306,11 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     if (updatedCount > 0) {
       alert(`Stock updated successfully! (${updatedCount} items)`);
       setOriginalStock({});
+      setOriginalAlertQty({});
+      setOriginalAlertStatus({});
       setDeltas({});
+      setEditedAlertQtys({});
+      setEditedAlertStatuses({});
       await fetchStock();
     } else if (lastError) {
       alert('Failed to save changes. Error: ' + (lastError as any).message);
@@ -593,8 +635,15 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Description</th>
                 {powerType !== 'SPH' && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Axis</th>}
                 <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Stock</th>
-                <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Update</th>
-                <th className="px-2 py-1.5 text-right text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-20">Actions</th>
+                {!isEditMode ? (
+                  <>
+                    <th className="px-1 py-1.5 text-center text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-40">Update</th>
+                    <th className="px-1 py-1.5 text-center text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-40">Alert Qty</th>
+                    <th className="px-1 py-1.5 text-center text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-24">Alert Status</th>
+                  </>
+                ) : (
+                  <th className="px-2 py-1.5 text-right text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-20">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -605,6 +654,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 const key = `${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}:${rowAxis || ''}:${row.add || ''}`;
                 const delta = deltas[key] || 0;
                 const origQty = originalStock[key] || 0;
+
+                const alertQty = editedAlertQtys[key] !== undefined ? editedAlertQtys[key] : (originalAlertQty[key] !== undefined ? originalAlertQty[key] : 0.00);
+                const alertStatus = editedAlertStatuses[key] !== undefined ? editedAlertStatuses[key] : (originalAlertStatus[key] !== undefined ? originalAlertStatus[key] : 'ON');
+
                 const isInsertMode = insertAt === index;
                 const isSelected = selectedRowIndexes.has(index);
 
@@ -612,7 +665,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                   <React.Fragment key={rowKey}>
                     {isInsertMode && (
                       <tr className="bg-yellow-50 dark:bg-yellow-900/20">
-                        <td colSpan={isEditMode ? (powerType !== 'SPH' ? 7 : 6) : (powerType !== 'SPH' ? 5 : 4)} className="p-2">
+                        <td colSpan={powerType !== 'SPH' ? 6 : 5} className="p-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <input type="number" step="0.25" placeholder="SPH" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.sph} onChange={(e) => setNewRowPower({ ...newRowPower, sph: e.target.value })} />
                             <input type="number" step="0.25" placeholder="CYL" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.cyl} onChange={(e) => setNewRowPower({ ...newRowPower, cyl: e.target.value })} />
@@ -670,21 +723,52 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                         </td>
                       )}
                       <td className="px-1 py-1.5 whitespace-nowrap text-[10px] text-center text-gray-400 dark:text-gray-500">{origQty.toFixed(2)}</td>
-                      <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${delta === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-indigo-600 dark:text-indigo-400'}`}>
-                        {delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}
-                      </td>
-                      <td className="px-2 py-1.5 whitespace-nowrap text-right">
-                        {!isEditMode ? (
-                          <div className="flex justify-end gap-1">
-                            <button onClick={(e) => { e.stopPropagation(); handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, -0.5); }} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Minus className="w-6 h-6" /></button>
-                            <button onClick={(e) => { e.stopPropagation(); handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, 0.5); }} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"><Plus className="w-6 h-6" /></button>
-                          </div>
-                        ) : (
+
+                      {!isEditMode ? (
+                        <>
+                          {/* Update Column */}
+                          <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button onClick={(e) => { e.stopPropagation(); handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, -0.5); }} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Minus className="w-6 h-6" /></button>
+                              <span className={`w-12 text-center text-[10px] font-bold ${delta === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                                {delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}
+                              </span>
+                              <button onClick={(e) => { e.stopPropagation(); handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, 0.5); }} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"><Plus className="w-6 h-6" /></button>
+                            </div>
+                          </td>
+
+                          {/* Alert Qty Column */}
+                          <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button onClick={(e) => { e.stopPropagation(); handleAlertQtyChange(row.sph, row.cyl, rowAxis, row.add, -0.5); }} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Minus className="w-6 h-6" /></button>
+                              <span className="w-12 text-center text-[10px] font-semibold text-gray-700 dark:text-gray-300">
+                                {alertQty.toFixed(2)}
+                              </span>
+                              <button onClick={(e) => { e.stopPropagation(); handleAlertQtyChange(row.sph, row.cyl, rowAxis, row.add, 0.5); }} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"><Plus className="w-6 h-6" /></button>
+                            </div>
+                          </td>
+
+                          {/* Alert Status Column */}
+                          <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleAlertStatusToggle(row.sph, row.cyl, rowAxis, row.add); }}
+                              className={`px-3 py-1.5 rounded-md text-xs font-black transition-colors ${
+                                alertStatus === 'ON'
+                                  ? 'text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                  : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                              }`}
+                            >
+                              {alertStatus}
+                            </button>
+                          </td>
+                        </>
+                      ) : (
+                        <td className="px-2 py-1.5 whitespace-nowrap text-right">
                           <div className="flex justify-end gap-1 text-[10px] text-gray-400 italic">
                             Select to delete
                           </div>
-                        )}
-                      </td>
+                        </td>
+                      )}
                     </tr>
                   </React.Fragment>
                 );

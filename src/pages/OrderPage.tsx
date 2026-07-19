@@ -317,11 +317,11 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const getShopName = (id: string) => shops.find(s => s.id === id)?.name || id;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20">
 
       {/* Top bar */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Place Order</h1>
+      <div className="sticky top-[137px] sm:top-16 z-40 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm -mx-4 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shadow-sm">
+        <h1 className="text-sm font-bold text-gray-900 dark:text-white">Place Order</h1>
         <div className="flex gap-2">
           <button onClick={openEditModal}
             className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm shadow-sm transition-colors">

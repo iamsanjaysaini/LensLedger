@@ -54,7 +54,8 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [selectedRowIndexes, setSelectedRowIndexes] = useState<Set<number>>(new Set());
   const [newRowPower, setNewRowPower] = useState({ sph: '', cyl: '', add: '' });
   const [insertAt, setInsertAt] = useState<number | null>(null);
-  const [ignoredRowKeys, setIgnoredRowKeys] = useState<Set<string>>(new Set());
+  const [isIgnored, setIsIgnored] = useState(false);
+  const [ignoreLoading, setIgnoreLoading] = useState(false);
 
   useEffect(() => {
     async function loadRows() {
@@ -162,45 +163,26 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     if (!selectedShop || isDemo) return;
     const { data } = await supabase
       .from('alert_ignores')
-      .select('sph, cyl, addition, axis')
+      .select('id')
       .eq('shop_id', selectedShop)
       .eq('material', material)
       .eq('vision', vision)
       .eq('sign', sign)
       .eq('power_type', powerType)
-      .filter('coatings', 'eq', `{${coatings.join(',')}}`);
-
-    const ignoredKeys = new Set<string>();
-    if (data) {
-      data.forEach(ig => {
-        const sphStr = ig.sph !== null && ig.sph !== undefined ? parseFloat(ig.sph).toFixed(2) : '';
-        const cylStr = ig.cyl !== null && ig.cyl !== undefined ? parseFloat(ig.cyl).toFixed(2) : '';
-        const addStr = ig.addition !== null && ig.addition !== undefined ? parseFloat(ig.addition).toFixed(2) : '';
-        const axisStr = ig.axis !== null && ig.axis !== undefined ? String(ig.axis) : '';
-        const key = `${sphStr}:${cylStr}:${axisStr}:${addStr}`;
-        ignoredKeys.add(key);
-      });
-    }
-    setIgnoredRowKeys(ignoredKeys);
+      .filter('coatings', 'eq', `{${coatings.join(',')}}`)
+      .maybeSingle();
+    setIsIgnored(!!data);
   }, [selectedShop, material, vision, sign, powerType, coatings, isDemo]);
 
   useEffect(() => {
     fetchIgnoreStatus();
   }, [fetchIgnoreStatus]);
 
-  const toggleRowIgnore = async (sph: string, cyl: string, axis: number | undefined, add: string | undefined) => {
+  const toggleIgnore = async () => {
     if (!selectedShop || isDemo) return;
-
-    const sphStr = parseFloat(sph).toFixed(2);
-    const cylStr = parseFloat(cyl).toFixed(2);
-    const axisStr = axis !== undefined && axis !== null ? String(axis) : '';
-    const addStr = add !== undefined && add !== null ? parseFloat(add).toFixed(2) : '';
-    const rowKey = `${sphStr}:${cylStr}:${axisStr}:${addStr}`;
-
-    const isCurrentlyIgnored = ignoredRowKeys.has(rowKey);
-
-    if (isCurrentlyIgnored) {
-      let query = supabase
+    setIgnoreLoading(true);
+    if (isIgnored) {
+      await supabase
         .from('alert_ignores')
         .delete()
         .eq('shop_id', selectedShop)
@@ -209,62 +191,19 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         .eq('sign', sign)
         .eq('power_type', powerType)
         .filter('coatings', 'eq', `{${coatings.join(',')}}`);
-
-      if (sph === '0.00' && powerType === 'SPH') {
-        query = query.eq('sph', 0);
-      } else {
-        query = query.eq('sph', parseFloat(sph));
-      }
-      query = query.eq('cyl', parseFloat(cyl));
-
-      if (axis !== undefined && axis !== null) {
-        query = query.eq('axis', axis);
-      } else {
-        query = query.is('axis', null);
-      }
-
-      if (add !== undefined && add !== null) {
-        query = query.eq('addition', parseFloat(add));
-      } else {
-        query = query.is('addition', null);
-      }
-
-      const { error } = await query;
-      if (error) {
-        console.error("Error deleting ignore:", error);
-        alert("Failed to update ignore state.");
-      } else {
-        const updated = new Set(ignoredRowKeys);
-        updated.delete(rowKey);
-        setIgnoredRowKeys(updated);
-      }
+      setIsIgnored(false);
     } else {
-      const insertData = {
+      await supabase.from('alert_ignores').insert({
         shop_id: selectedShop,
         material,
         vision,
         sign,
         power_type: powerType,
         coatings,
-        sph: parseFloat(sph),
-        cyl: parseFloat(cyl),
-        axis: axis !== undefined && axis !== null ? axis : null,
-        addition: add !== undefined && add !== null ? parseFloat(add) : null
-      };
-
-      const { error } = await supabase
-        .from('alert_ignores')
-        .insert(insertData);
-
-      if (error) {
-        console.error("Error inserting ignore:", error);
-        alert("Failed to update ignore state.");
-      } else {
-        const updated = new Set(ignoredRowKeys);
-        updated.add(rowKey);
-        setIgnoredRowKeys(updated);
-      }
+      });
+      setIsIgnored(true);
     }
+    setIgnoreLoading(false);
   };
 
   const handleQuantityChange = (sph: string, cyl: string, axis: number | undefined, add: string | undefined, delta: number) => {
@@ -504,6 +443,23 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         <div className="flex gap-2">
           {!isEditMode ? (
             <>
+              {!isDemo && (
+                <button
+                  onClick={toggleIgnore}
+                  disabled={ignoreLoading || !selectedShop}
+                  title={isIgnored ? 'Is list ko dobara alert mein dikhao' : 'Is list ko low stock alert mein ignore karo'}
+                  className={`px-3 py-1.5 rounded-md flex items-center text-[10px] sm:text-xs transition-colors disabled:opacity-50 border ${
+                    isIgnored
+                      ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-300 dark:border-orange-700 hover:bg-orange-100'
+                      : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {isIgnored
+                    ? <><BellOff className="w-3.5 h-3.5 mr-1" /> Ignored</>
+                    : <><Bell className="w-3.5 h-3.5 mr-1" /> Ignore Alert</>
+                  }
+                </button>
+              )}
               <button onClick={handleEditToggle} className="bg-indigo-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-indigo-700 text-[10px] sm:text-xs transition-colors">
                 <Edit2 className="w-3.5 h-3.5 mr-1" /> Edit List
               </button>
@@ -639,7 +595,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Stock</th>
                 <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Update</th>
                 <th className="px-2 py-1.5 text-right text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-20">Actions</th>
-                <th className="px-2 py-1.5 text-center text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Ignore</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -657,7 +612,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                   <React.Fragment key={rowKey}>
                     {isInsertMode && (
                       <tr className="bg-yellow-50 dark:bg-yellow-900/20">
-                        <td colSpan={isEditMode ? (powerType !== 'SPH' ? 8 : 7) : (powerType !== 'SPH' ? 6 : 5)} className="p-2">
+                        <td colSpan={isEditMode ? (powerType !== 'SPH' ? 7 : 6) : (powerType !== 'SPH' ? 5 : 4)} className="p-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <input type="number" step="0.25" placeholder="SPH" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.sph} onChange={(e) => setNewRowPower({ ...newRowPower, sph: e.target.value })} />
                             <input type="number" step="0.25" placeholder="CYL" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.cyl} onChange={(e) => setNewRowPower({ ...newRowPower, cyl: e.target.value })} />
@@ -728,27 +683,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                           <div className="flex justify-end gap-1 text-[10px] text-gray-400 italic">
                             Select to delete
                           </div>
-                        )}
-                      </td>
-                      <td className="px-2 py-1.5 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
-                        {!isEditMode && !isDemo && selectedShop ? (
-                          <button
-                            onClick={() => toggleRowIgnore(row.sph, row.cyl, rowAxis, row.add)}
-                            title={ignoredRowKeys.has(`${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}:${rowAxis || ''}:${row.add || ''}`) ? 'Is lens ko dobara alert mein dikhao' : 'Is lens ko low stock alert mein ignore karo'}
-                            className={`p-1.5 rounded-md transition-colors ${
-                              ignoredRowKeys.has(`${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}:${rowAxis || ''}:${row.add || ''}`)
-                                ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800/40 hover:bg-orange-100'
-                                : 'text-gray-400 hover:text-orange-500 dark:hover:text-orange-400'
-                            }`}
-                          >
-                            {ignoredRowKeys.has(`${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}:${rowAxis || ''}:${row.add || ''}`) ? (
-                              <BellOff className="w-4 h-4" />
-                            ) : (
-                              <Bell className="w-4 h-4" />
-                            )}
-                          </button>
-                        ) : (
-                          <span className="text-gray-300 dark:text-gray-600">-</span>
                         )}
                       </td>
                     </tr>

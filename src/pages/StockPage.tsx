@@ -632,7 +632,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                   </th>
                 )}
                 {isEditMode && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Move</th>}
-                <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Description</th>
+                <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-48">Description</th>
                 {powerType !== 'SPH' && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Axis</th>}
                 <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Stock</th>
                 {!isEditMode ? (
@@ -678,7 +678,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                         </td>
                       </tr>
                     )}
-                    <tr
+                      <tr
                       onContextMenu={(e) => { if (isEditMode) { e.preventDefault(); initiateInsert(index); } }}
                       onMouseDown={(e) => { if (isEditMode) { const timer = setTimeout(() => initiateInsert(index), 700); (e.currentTarget as any)._holdTimer = timer; } }}
                       onMouseUp={(e) => { if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer); }}
@@ -710,7 +710,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                           </div>
                         </td>
                       )}
-                      <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300 select-none">
+                        <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300 select-none w-48">
                         {isEditMode && <span className="mr-2 text-gray-400">☰</span>}
                         {name}
                       </td>

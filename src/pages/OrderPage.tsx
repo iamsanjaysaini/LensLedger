@@ -440,15 +440,15 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           <div className="flex gap-2">
             <input type="text" value={customPower} onChange={(e) => setCustomPower(e.target.value)}
               placeholder="Enter power (e.g. +12.00 -4.50 x 90)"
-              className="flex-[3] text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-0"
               onKeyPress={(e) => e.key === 'Enter' && saveCustomPowerDirectly()} />
-            <div className="flex-[1] flex items-center bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-md px-2">
-              <span className="text-[10px] font-bold text-gray-400 mr-1">QTY:</span>
+            <label className="w-24 shrink-0 flex items-center bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-md px-2.5 cursor-pointer focus-within:ring-2 focus-within:ring-indigo-500">
+              <span className="text-[10px] font-bold text-gray-400 mr-1 select-none">QTY:</span>
               <input type="number" step="0.5" min="0.5" value={customQty} onChange={(e) => setCustomQty(e.target.value)}
-                className="w-full bg-transparent text-sm text-gray-900 dark:text-gray-100 focus:outline-none" />
-            </div>
+                className="w-full bg-transparent text-sm text-gray-900 dark:text-gray-100 focus:outline-none py-1.5" />
+            </label>
             <button onClick={saveCustomPowerDirectly} disabled={customSaving || !customPower.trim()}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center text-sm font-medium hover:bg-indigo-700 shadow-sm transition-colors disabled:opacity-50">
+              className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center text-sm font-medium hover:bg-indigo-700 shadow-sm transition-colors disabled:opacity-50 shrink-0">
               {customSaving ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Saving...</> : <><ShoppingCart className="w-4 h-4 mr-1" /> Save</>}
             </button>
           </div>

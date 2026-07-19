@@ -480,7 +480,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
   return (
     <div className="space-y-4 pb-20">
-      <div className="sticky top-16 z-40 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm -mx-4 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shadow-sm">
+      <div className="sticky top-[137px] sm:top-16 z-40 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm -mx-4 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shadow-sm">
         <h1 className="text-sm font-bold text-gray-900 dark:text-white truncate">Stock {isEditMode ? '(Edit Mode)' : ''}</h1>
         <div className="flex gap-2">
           {!isEditMode ? (

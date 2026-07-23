@@ -153,7 +153,7 @@ export async function saveCustomLensRows(
   return { success: true };
 }
 
-export function generateLensRows(powerType: PowerType, compoundLimit: string = '2.0', vision: Vision = 'single vision') {
+export function generateLensRows(powerType: PowerType, compoundLimit: string = '2.0', vision: Vision = 'single vision', sign: Sign | null = null) {
   const rows: CustomLensRow[] = [];
   const isKT = vision === 'KT';
   const isProg = vision === 'Prograssive';
@@ -165,6 +165,9 @@ export function generateLensRows(powerType: PowerType, compoundLimit: string = '
     const sphMax = isKT ? 3.0 : 6.0;
     const sphs = generatePowerList(true, sphMax);
     sphs.forEach(s => {
+      if (parseFloat(s) === 0 && sign === '+') {
+        return;
+      }
       adds.forEach(add => {
         rows.push({ sph: s, cyl: '0.00', add });
       });

@@ -77,8 +77,14 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function loadRows() {
       setLoading(true);
-      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
-      setCustomRows(custom || generateLensRows(powerType, compoundLimit, vision));
+      let custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
+      if (!custom) {
+        custom = generateLensRows(powerType, compoundLimit, vision, sign);
+      }
+      if (sign === '+' && powerType === 'SPH') {
+        custom = custom.filter(row => parseFloat(row.sph) !== 0);
+      }
+      setCustomRows(custom);
       setLoading(false);
     }
     loadRows();

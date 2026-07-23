@@ -10,12 +10,12 @@ type ReportView =
   | 'individual_orders'
   | 'individual_orders_date'
   | 'individual_sale'
-  | 'individual_lensqty'
+  | 'individual_orderedlensqty'
   | 'combined'
   | 'combined_orders'
   | 'combined_orders_date'
   | 'combined_sale'
-  | 'combined_lensqty';
+  | 'combined_orderedlensqty';
 
 function DateRangeForm({ onSearch }: { onSearch: (start: string, end: string) => void }) {
   const [localStart, setLocalStart] = useState('');
@@ -179,14 +179,11 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
 
   async function fetchLensQtyForShop(shopId: string) {
     setLoading(true);
-    const { data } = await supabase.from('lens_stock').select('*').eq('shop_id', shopId).gt('quantity', 0);
+    const { data } = await supabase.from('orders').select('lens_details, quantity').eq('shop_id', shopId);
     if (data) {
       const summary: Record<string, number> = {};
       data.forEach(item => {
-        if (item.power_type === 'SPH' && Number(item.sph) === 0 && item.sign === '+') {
-          return;
-        }
-        const name = buildStockName(item);
+        const name = item.lens_details?.name || '';
         summary[name] = (summary[name] || 0) + Number(item.quantity);
       });
       setReportData(Object.entries(summary).map(([name, qty]) => ({ name, qty })).sort((a, b) => sortLensNames(a.name, b.name)));
@@ -231,14 +228,11 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
 
   async function fetchCombinedLensQty() {
     setLoading(true);
-    const { data } = await supabase.from('lens_stock').select('*').gt('quantity', 0);
+    const { data } = await supabase.from('orders').select('lens_details, quantity');
     if (data) {
       const summary: Record<string, number> = {};
       data.forEach(item => {
-        if (item.power_type === 'SPH' && Number(item.sph) === 0 && item.sign === '+') {
-          return;
-        }
-        const name = buildStockName(item);
+        const name = item.lens_details?.name || '';
         summary[name] = (summary[name] || 0) + Number(item.quantity);
       });
       setReportData(Object.entries(summary).map(([name, qty]) => ({ name, qty })).sort((a, b) => sortLensNames(a.name, b.name)));
@@ -336,11 +330,11 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
       individual_orders: () => { setView('individual_shop'); setOrderDates([]); },
       individual_orders_date: () => { setView('individual_orders'); setSelectedDate(null); },
       individual_sale: () => setView('individual_shop'),
-      individual_lensqty: () => setView('individual_shop'),
+      individual_orderedlensqty: () => setView('individual_shop'),
       combined_orders: () => { setView('combined'); setOrderDates([]); },
       combined_orders_date: () => { setView('combined_orders'); setSelectedDate(null); },
       combined_sale: () => setView('combined'),
-      combined_lensqty: () => setView('combined'),
+      combined_orderedlensqty: () => setView('combined'),
     };
     backMap[view]?.();
   }
@@ -349,10 +343,10 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
     home: 'Reports', individual: 'Individual',
     individual_shop: selectedShop?.name || 'Shop',
     individual_orders: 'Orders', individual_orders_date: selectedDate ? formatDate(selectedDate) : '',
-    individual_sale: 'Sale', individual_lensqty: 'Lens Quantity',
+    individual_sale: 'Sale', individual_orderedlensqty: 'Ordered lens quantity',
     combined: 'Combined', combined_orders: 'Orders',
     combined_orders_date: selectedDate ? formatDate(selectedDate) : '',
-    combined_sale: 'Sale', combined_lensqty: 'Lens Quantity',
+    combined_sale: 'Sale', combined_orderedlensqty: 'Ordered lens quantity',
   };
 
   const breadcrumbFlow: ReportView[] = (() => {
@@ -363,12 +357,12 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
       individual_orders: ['home', 'individual', 'individual_shop', 'individual_orders'],
       individual_orders_date: ['home', 'individual', 'individual_shop', 'individual_orders', 'individual_orders_date'],
       individual_sale: ['home', 'individual', 'individual_shop', 'individual_sale'],
-      individual_lensqty: ['home', 'individual', 'individual_shop', 'individual_lensqty'],
+      individual_orderedlensqty: ['home', 'individual', 'individual_shop', 'individual_orderedlensqty'],
       combined: ['home', 'combined'],
       combined_orders: ['home', 'combined', 'combined_orders'],
       combined_orders_date: ['home', 'combined', 'combined_orders', 'combined_orders_date'],
       combined_sale: ['home', 'combined', 'combined_sale'],
-      combined_lensqty: ['home', 'combined', 'combined_lensqty'],
+      combined_orderedlensqty: ['home', 'combined', 'combined_orderedlensqty'],
     };
     return flows[view] || ['home'];
   })();
@@ -490,8 +484,8 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
             onClick={() => { fetchOrderDates(selectedShop.id); setView('individual_orders'); }} />
           <CardButton label="Sale" icon={<Tag className="w-5 h-5 text-green-600 dark:text-green-400" />} iconBg="bg-green-50 dark:bg-green-900/30"
             onClick={() => { fetchSalesForShop(selectedShop.id); setView('individual_sale'); }} />
-          <CardButton label="Lens Quantity" icon={<Layers className="w-5 h-5 text-purple-600 dark:text-purple-400" />} iconBg="bg-purple-50 dark:bg-purple-900/30"
-            onClick={() => { fetchLensQtyForShop(selectedShop.id); setView('individual_lensqty'); }} />
+          <CardButton label="Ordered lens quantity" icon={<Layers className="w-5 h-5 text-purple-600 dark:text-purple-400" />} iconBg="bg-purple-50 dark:bg-purple-900/30"
+            onClick={() => { fetchLensQtyForShop(selectedShop.id); setView('individual_orderedlensqty'); }} />
         </div>
       )}
 
@@ -515,7 +509,7 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
       {view === 'individual_sale' && (loading ? <Loader /> : <ReportTable items={reportData} title={`${selectedShop?.name} — Sale Report`} />)}
 
       {/* INDIVIDUAL LENS QTY */}
-      {view === 'individual_lensqty' && (loading ? <Loader /> : <ReportTable items={reportData} title={`${selectedShop?.name} — Lens Stock`} />)}
+      {view === 'individual_orderedlensqty' && (loading ? <Loader /> : <ReportTable items={reportData} title={`${selectedShop?.name} — Ordered lens quantity`} />)}
 
       {/* COMBINED */}
       {view === 'combined' && (
@@ -524,8 +518,8 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
             onClick={() => { fetchCombinedOrderDates(); setView('combined_orders'); }} />
           <CardButton label="Sale" icon={<Tag className="w-5 h-5 text-green-600 dark:text-green-400" />} iconBg="bg-green-50 dark:bg-green-900/30"
             onClick={() => { fetchCombinedSales(); setView('combined_sale'); }} />
-          <CardButton label="Lens Quantity" icon={<Layers className="w-5 h-5 text-purple-600 dark:text-purple-400" />} iconBg="bg-purple-50 dark:bg-purple-900/30"
-            onClick={() => { fetchCombinedLensQty(); setView('combined_lensqty'); }} />
+          <CardButton label="Ordered lens quantity" icon={<Layers className="w-5 h-5 text-purple-600 dark:text-purple-400" />} iconBg="bg-purple-50 dark:bg-purple-900/30"
+            onClick={() => { fetchCombinedLensQty(); setView('combined_orderedlensqty'); }} />
         </div>
       )}
 
@@ -550,7 +544,7 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
       {view === 'combined_sale' && (loading ? <Loader /> : <ReportTable items={reportData} title="Combined Sale Report (Both Shops)" />)}
 
       {/* COMBINED LENS QTY */}
-      {view === 'combined_lensqty' && (loading ? <Loader /> : <ReportTable items={reportData} title="Combined Lens Stock (Both Shops)" />)}
+      {view === 'combined_orderedlensqty' && (loading ? <Loader /> : <ReportTable items={reportData} title="Combined Ordered lens quantity (Both Shops)" />)}
     </div>
   );
 }

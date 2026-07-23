@@ -3,13 +3,8 @@
 > vite
 
 
-  VITE v6.4.2  ready in 228 ms
+  VITE v6.4.2  ready in 585 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
-7:29:06 AM [vite] (client) hmr update /src/pages/ReportsPage.tsx, /src/index.css
-7:30:26 AM [vite] (client) hmr update /src/pages/ReportsPage.tsx, /src/index.css
-7:30:33 AM [vite] (client) hmr update /src/pages/ReportsPage.tsx, /src/index.css
-7:30:37 AM [vite] (client) hmr update /src/pages/ReportsPage.tsx, /src/index.css
-7:30:42 AM [vite] (client) hmr update /src/pages/ReportsPage.tsx, /src/index.css
-7:30:46 AM [vite] (client) hmr update /src/pages/ReportsPage.tsx, /src/index.css
+8:33:59 AM [vite] (client) page reload query.js

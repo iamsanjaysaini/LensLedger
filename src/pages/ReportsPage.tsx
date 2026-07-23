@@ -17,6 +17,56 @@ type ReportView =
   | 'combined_sale'
   | 'combined_lensqty';
 
+function DateRangeForm({ onSearch }: { onSearch: (start: string, end: string) => void }) {
+  const [localStart, setLocalStart] = useState('');
+  const [localEnd, setLocalEnd] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!localStart || !localEnd) {
+      alert('Please select both From and To dates');
+      return;
+    }
+    if (localStart > localEnd) {
+      alert('From date cannot be after To date');
+      return;
+    }
+    onSearch(localStart, localEnd);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm mb-5">
+      <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Custom Date Range</h3>
+      <div className="flex flex-col sm:flex-row items-end gap-3">
+        <div className="w-full sm:w-auto flex-1">
+          <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">From Date</label>
+          <input
+            type="date"
+            value={localStart}
+            onChange={(e) => setLocalStart(e.target.value)}
+            className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+        </div>
+        <div className="w-full sm:w-auto flex-1">
+          <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">To Date</label>
+          <input
+            type="date"
+            value={localEnd}
+            onChange={(e) => setLocalEnd(e.target.value)}
+            className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+        </div>
+        <button
+          type="submit"
+          className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer"
+        >
+          Show Orders
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
   const [view, setView] = useState<ReportView>('home');
@@ -47,6 +97,37 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
       .order('created_at', { ascending: false });
     if (data) {
       setOrderDates(Array.from(new Set(data.map(o => o.created_at.split('T')[0]))));
+    }
+    setLoading(false);
+  }
+
+  async function fetchCombinedOrdersForRange(start: string, end: string) {
+    setLoading(true);
+    const { data } = await supabase
+      .from('orders')
+      .select('lens_details, quantity')
+      .gte('created_at', `${start}T00:00:00`)
+      .lte('created_at', `${end}T23:59:59`);
+    if (data) {
+      const summary: Record<string, number> = {};
+      data.forEach(o => { summary[o.lens_details.name] = (summary[o.lens_details.name] || 0) + Number(o.quantity); });
+      setReportData(Object.entries(summary).map(([name, qty]) => ({ name, qty })).sort((a, b) => sortLensNames(a.name, b.name)));
+    }
+    setLoading(false);
+  }
+
+  async function fetchOrdersForRange(shopId: string, start: string, end: string) {
+    setLoading(true);
+    const { data } = await supabase
+      .from('orders')
+      .select('lens_details, quantity')
+      .eq('shop_id', shopId)
+      .gte('created_at', `${start}T00:00:00`)
+      .lte('created_at', `${end}T23:59:59`);
+    if (data) {
+      const summary: Record<string, number> = {};
+      data.forEach(o => { summary[o.lens_details.name] = (summary[o.lens_details.name] || 0) + Number(o.quantity); });
+      setReportData(Object.entries(summary).map(([name, qty]) => ({ name, qty })).sort((a, b) => sortLensNames(a.name, b.name)));
     }
     setLoading(false);
   }
@@ -237,6 +318,12 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
   }
 
   function formatDate(dateStr: string) {
+    if (dateStr.includes(':')) {
+      const [start, end] = dateStr.split(':');
+      const startFormatted = new Date(start + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const endFormatted = new Date(end + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      return `${startFormatted} to ${endFormatted}`;
+    }
     return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
   }
 
@@ -410,7 +497,15 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
 
       {/* INDIVIDUAL ORDERS: Dates */}
       {view === 'individual_orders' && (
-        <DateGrid dates={orderDates} onSelect={(date) => { setSelectedDate(date); fetchOrdersForDate(selectedShop!.id, date); setView('individual_orders_date'); }} />
+        <>
+          <DateRangeForm onSearch={(start, end) => {
+            const rangeKey = `${start}:${end}`;
+            setSelectedDate(rangeKey);
+            fetchOrdersForRange(selectedShop!.id, start, end);
+            setView('individual_orders_date');
+          }} />
+          <DateGrid dates={orderDates} onSelect={(date) => { setSelectedDate(date); fetchOrdersForDate(selectedShop!.id, date); setView('individual_orders_date'); }} />
+        </>
       )}
 
       {/* INDIVIDUAL ORDERS DATE */}
@@ -436,8 +531,16 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
 
       {/* COMBINED ORDERS: Dates */}
       {view === 'combined_orders' && (
-        <DateGrid dates={orderDates} iconColor="text-purple-400"
-          onSelect={(date) => { setSelectedDate(date); fetchCombinedOrdersForDate(date); setView('combined_orders_date'); }} />
+        <>
+          <DateRangeForm onSearch={(start, end) => {
+            const rangeKey = `${start}:${end}`;
+            setSelectedDate(rangeKey);
+            fetchCombinedOrdersForRange(start, end);
+            setView('combined_orders_date');
+          }} />
+          <DateGrid dates={orderDates} iconColor="text-purple-400"
+            onSelect={(date) => { setSelectedDate(date); fetchCombinedOrdersForDate(date); setView('combined_orders_date'); }} />
+        </>
       )}
 
       {/* COMBINED ORDERS DATE */}

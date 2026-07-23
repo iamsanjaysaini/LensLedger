@@ -102,6 +102,9 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
     if (data) {
       const summary: Record<string, number> = {};
       data.forEach(item => {
+        if (item.power_type === 'SPH' && Number(item.sph) === 0 && item.sign === '+') {
+          return;
+        }
         const name = buildStockName(item);
         summary[name] = (summary[name] || 0) + Number(item.quantity);
       });
@@ -151,6 +154,9 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
     if (data) {
       const summary: Record<string, number> = {};
       data.forEach(item => {
+        if (item.power_type === 'SPH' && Number(item.sph) === 0 && item.sign === '+') {
+          return;
+        }
         const name = buildStockName(item);
         summary[name] = (summary[name] || 0) + Number(item.quantity);
       });

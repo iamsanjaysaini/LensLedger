@@ -64,12 +64,14 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function loadRows() {
       setLoading(true);
-      const custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
-      if (custom) {
-        setCustomRows(custom);
-      } else {
-        setCustomRows(generateLensRows(powerType, compoundLimit, vision));
+      let custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
+      if (!custom) {
+        custom = generateLensRows(powerType, compoundLimit, vision, sign);
       }
+      if (sign === '+' && powerType === 'SPH') {
+        custom = custom.filter(row => parseFloat(row.sph) !== 0);
+      }
+      setCustomRows(custom);
       setLoading(false);
     }
     loadRows();
@@ -350,8 +352,14 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const handleEditToggle = () => {
     if (isEditMode) {
       fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings).then(custom => {
-        if (custom) setCustomRows(custom);
-        else setCustomRows(generateLensRows(powerType, compoundLimit, vision));
+        let rows = custom;
+        if (!rows) {
+          rows = generateLensRows(powerType, compoundLimit, vision, sign);
+        }
+        if (sign === '+' && powerType === 'SPH') {
+          rows = rows.filter(row => parseFloat(row.sph) !== 0);
+        }
+        setCustomRows(rows);
       });
     }
     setIsEditMode(!isEditMode);
@@ -362,7 +370,13 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const handleSaveList = async () => {
     setLoading(true);
     try {
-      const oldRows = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings) || generateLensRows(powerType, compoundLimit, vision);
+      let oldRows = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
+      if (!oldRows) {
+        oldRows = generateLensRows(powerType, compoundLimit, vision, sign);
+      }
+      if (sign === '+' && powerType === 'SPH') {
+        oldRows = oldRows.filter(row => parseFloat(row.sph) !== 0);
+      }
       const { success, error } = await saveCustomLensRows(material, vision, sign, powerType, compoundLimit, customRows, coatings);
 
       if (!success) {

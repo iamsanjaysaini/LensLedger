@@ -285,6 +285,9 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
       );
       const items: LowStockItem[] = [];
       (stockDataAll || []).forEach((item: any) => {
+        if (item.power_type === 'SPH' && Number(item.sph) === 0 && item.sign === '+') {
+          return;
+        }
         const coatingsKey = (item.coatings || []).join(',');
         const ignoreKey = `${item.shop_id}|${item.material}|${item.vision}|${item.sign || ''}|${item.power_type}|${coatingsKey}`;
         if (ignoreSet.has(ignoreKey)) return;

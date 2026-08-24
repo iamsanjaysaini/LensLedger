@@ -7,6 +7,7 @@ import OrderPage from './pages/OrderPage';
 import SellPage from './pages/SellPage';
 import ReportsPage from './pages/ReportsPage';
 import Auth from './components/Auth';
+import { ToastContainer } from './components/Toast';
 import { LayoutDashboard, Package, ShoppingCart, LogOut, Tag, FileText } from 'lucide-react';
 import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 
@@ -134,6 +135,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+      <ToastContainer />
     </div>
   );
 }

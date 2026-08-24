@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { showToast } from '../components/Toast';
 import {
   generateLensRows,
   fetchCustomLensRows,
@@ -187,9 +188,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   };
 
   const saveOrder = async () => {
-    if (isDemo) { alert('Demo Mode: Orders are not saved.'); return; }
+    if (isDemo) { showToast('Demo Mode: Orders are not saved.', 'info'); return; }
     const entries = Object.entries(deltas);
-    if (!entries.length) { alert('Please add items to order.'); return; }
+    if (!entries.length) { showToast('Please add items to order.', 'info'); return; }
     setLoading(true);
     let ok = 0, lastErr = null;
     for (const [, data] of entries) {
@@ -199,7 +200,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       error ? (lastErr = error) : ok++;
     }
     setLoading(false);
-    if (ok > 0) { alert(`Orders saved! (${ok} items)`); setDeltas({}); }
+    if (ok > 0) { showToast(`Orders saved! (${ok} items)`, 'success'); setDeltas({}); }
     else if (lastErr) alert('Failed: ' + (lastErr as any).message);
   };
 
@@ -207,14 +208,14 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     if (!customPower.trim()) return;
     const qty = parseFloat(customQty) || 1.0;
     const name = customPower.trim();
-    if (isDemo) { alert('Demo Mode: Custom orders are not saved.'); return; }
+    if (isDemo) { showToast('Demo Mode: Custom orders are not saved.', 'info'); return; }
     setCustomSaving(true);
     const { error } = await supabase.from('orders').insert({
       shop_id: selectedShop, lens_details: { name }, quantity: qty
     });
     setCustomSaving(false);
     if (error) alert('Failed: ' + error.message);
-    else { setCustomPower(''); setCustomQty('1.0'); alert(`"${name}" (${qty} pair) saved!`); }
+    else { setCustomPower(''); setCustomQty('1.0'); showToast(`"${name}" (${qty} pair) saved!`, 'success'); }
   };
 
   const toggleCoating = (c: string) => {
@@ -270,7 +271,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           .columns{display:flex;gap:4px}.column{flex:1}
           table{width:100%;border-collapse:collapse}
           td{border:1px solid #ccc;padding:2px 4px;text-align:left;line-height:1.2}
-          .qty-col{width:30px;text-align:center;font-weight:bold;white-space:nowrap}
+          .qty-col{width:65px;text-align:center;font-weight:bold;white-space:nowrap}
           .frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;font-size:.75em;line-height:1;margin:0 1px}
           .frac .num{display:block;border-bottom:1px solid black;padding:0 1px;line-height:1.1}
           .frac .den{display:block;padding:0 1px;line-height:1.1}
@@ -313,11 +314,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   function formatQtyHTML(qty: number): string {
     const whole = Math.floor(qty);
     const frac = qty % 1;
+    const unit = qty === 1 ? 'Pair' : 'Pairs';
     if (frac === 0.5) {
       const w = whole > 0 ? `${whole}` : '';
-      return `${w}<span class="frac"><span class="num">1</span><span class="den">2</span></span>`;
+      return `${w}<span class="frac"><span class="num">1</span><span class="den">2</span></span> ${unit}`;
     }
-    return qty.toString();
+    return `${qty} ${unit}`;
   }
 
   const getShopName = (id: string) => shops.find(s => s.id === id)?.name || id;

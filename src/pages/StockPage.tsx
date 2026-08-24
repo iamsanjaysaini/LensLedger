@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { showToast } from '../components/Toast';
 import {
   generateLensRows,
   getDefaultAxis,
@@ -244,7 +245,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const saveStock = async () => {
     if (isDemo) {
-      alert('Demo Mode: Stock changes are not saved to the database.');
+      showToast('Demo Mode: Stock changes are not saved to the database.', 'info');
       return;
     }
 
@@ -255,7 +256,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     ]));
 
     if (allKeys.length === 0) {
-      alert('No changes were made to save.');
+      showToast('No changes were made to save.', 'info');
       return;
     }
 
@@ -306,7 +307,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
     setLoading(false);
     if (updatedCount > 0) {
-      alert(`Stock updated successfully! (${updatedCount} items)`);
+      showToast(`Stock updated successfully! (${updatedCount} items)`, 'success');
       setOriginalStock({});
       setOriginalAlertQty({});
       setOriginalAlertStatus({});
@@ -317,7 +318,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     } else if (lastError) {
       alert('Failed to save changes. Error: ' + (lastError as any).message);
     } else {
-      alert('No changes were applied.');
+      showToast('No changes were applied.', 'info');
     }
   };
 
@@ -411,7 +412,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
         }
       }
 
-      alert('List saved successfully!');
+      showToast('List saved successfully!', 'success');
       setIsEditMode(false);
     } catch (e) {
       console.error(e);

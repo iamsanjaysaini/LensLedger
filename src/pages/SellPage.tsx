@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { showToast } from '../components/Toast';
 import {
   generateLensRows,
   fetchCustomLensRows,
@@ -303,9 +304,9 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   };
 
   const saveSale = async () => {
-    if (isDemo) { alert('Demo Mode: Sales are not saved.'); return; }
+    if (isDemo) { showToast('Demo Mode: Sales are not saved.', 'info'); return; }
     const entries = Object.entries(deltas);
-    if (!entries.length) { alert('Please add items to sell.'); return; }
+    if (!entries.length) { showToast('Please add items to sell.', 'info'); return; }
     setLoading(true);
     let ok = 0, lastErr = null;
 
@@ -343,7 +344,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
 
     setLoading(false);
     if (ok > 0) {
-      alert(`Sales recorded! (${ok} items)`);
+      showToast(`Sales recorded! (${ok} items)`, 'success');
       setOriginalStock({});  // Clear before refetch so UI refreshes properly
       setDeltas({});
       await fetchStock();

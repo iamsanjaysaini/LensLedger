@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { showToast } from '../components/Toast';
 import { Store, ChevronRight, FileText, Bell, ChevronLeft, AlertTriangle, Calendar, PackagePlus, Check, Loader2 } from 'lucide-react';
 import { Shop, sortLensNames } from '../utils/lensUtils';
 
@@ -363,8 +364,8 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   }
 
   async function updateToStock(orders: { name: string; qty: number }[], shopId: string, modeKey: string) {
-    if (!shopId) { alert('Pehle shop select karo.'); return; }
-    if (isDemo) { alert('Demo Mode: Stock update not available.'); return; }
+    if (!shopId) { showToast('Pehle shop select karo.', 'info'); return; }
+    if (isDemo) { showToast('Demo Mode: Stock update not available.', 'info'); return; }
     setStockUpdateLoading(true);
     let ok = 0, fail = 0, failNames: string[] = [];
 
@@ -378,7 +379,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
 
     setStockUpdateLoading(false);
     if (fail === 0) {
-      alert(`Stock updated! ${ok} lens${ok !== 1 ? 'es' : ''} ke liye quantity add ho gayi.`);
+      showToast(`Stock updated! ${ok} lens${ok !== 1 ? 'es' : ''} ke liye quantity add ho gayi.`, 'success');
       setEditStockMode(null);
       setEditedQtys({});
     } else {

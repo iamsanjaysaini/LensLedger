@@ -21,7 +21,8 @@ import {
   formatReportQty,
   sortLensNames
 } from '../utils/lensUtils';
-import { Plus, Minus, ShoppingCart, FileText, X, Loader2, Edit2, Trash2, Check } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, FileText, X, Loader2, Edit2, Trash2, Check, PackageCheck, Calendar } from 'lucide-react';
+import { parseLensName, isStockLens } from '../utils/lensUtils';
 
 interface OrderRecord {
   id: string;
@@ -29,6 +30,12 @@ interface OrderRecord {
   quantity: number;
   created_at: string;
   shop_id: string;
+}
+
+interface DateSummary {
+  date: string;
+  count: number;
+  totalQty: number;
 }
 
 export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
@@ -72,6 +79,17 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [editingQty, setEditingQty] = useState('');
   const [editingName, setEditingName] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Sent Orders modal state
+  const [showSentOrders, setShowSentOrders] = useState(false);
+  const [dateSummaries, setDateSummaries] = useState<DateSummary[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [sentOrderRecords, setSentOrderRecords] = useState<OrderRecord[]>([]);
+  const [sentOrderQuantities, setSentOrderQuantities] = useState<Record<string, number>>({});
+  const [sentLoading, setSentLoading] = useState(false);
+  const [sentSelectedIds, setSentSelectedIds] = useState<Set<string>>(new Set());
+  const [stockLensStatus, setStockLensStatus] = useState<Record<string, boolean>>({});
+  const [updateStockLoading, setUpdateStockLoading] = useState(false);
 
   const isKTOrProg = vision === 'KT' || vision === 'Prograssive';
 
@@ -138,6 +156,210 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     setSelectedIds(new Set());
     setEditingId(null);
     fetchTodayOrders();
+  };
+
+  // Fetch unique dates for Sent Orders
+  const fetchSentOrderDates = useCallback(async () => {
+    if (isDemo) {
+      setDateSummaries([
+        { date: new Date().toISOString().split('T')[0], count: 3, totalQty: 5 }
+      ]);
+      return;
+    }
+    setSentLoading(true);
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id, quantity, created_at')
+      .order('created_at', { ascending: false });
+
+    if (error || !data) {
+      setSentLoading(false);
+      return;
+    }
+
+    const map: Record<string, { count: number; totalQty: number }> = {};
+    data.forEach(item => {
+      const dateStr = item.created_at.split('T')[0];
+      if (!map[dateStr]) map[dateStr] = { count: 0, totalQty: 0 };
+      map[dateStr].count += 1;
+      map[dateStr].totalQty += Number(item.quantity);
+    });
+
+    const summaries: DateSummary[] = Object.keys(map).map(date => ({
+      date,
+      count: map[date].count,
+      totalQty: map[date].totalQty
+    }));
+
+    setDateSummaries(summaries);
+    setSentLoading(false);
+  }, [isDemo]);
+
+  const openSentOrdersModal = () => {
+    setShowSentOrders(true);
+    setSelectedDate(null);
+    setSentOrderRecords([]);
+    setSentSelectedIds(new Set());
+    fetchSentOrderDates();
+  };
+
+  const fetchOrdersForDate = async (dateStr: string) => {
+    setSelectedDate(dateStr);
+    setSentLoading(true);
+    setSentSelectedIds(new Set());
+
+    if (isDemo) {
+      const demoRecords: OrderRecord[] = [
+        { id: '1', lens_details: { name: '-2.00 SPH HC CR single vision' }, quantity: 2, created_at: `${dateStr}T10:00:00`, shop_id: '1' },
+        { id: '2', lens_details: { name: '-1.00/-0.50 HMC Poly single vision' }, quantity: 1, created_at: `${dateStr}T11:00:00`, shop_id: '1' },
+        { id: '3', lens_details: { name: '+12.00 -4.50 x 90 Custom' }, quantity: 1, created_at: `${dateStr}T12:00:00`, shop_id: '1' }
+      ];
+      setSentOrderRecords(demoRecords);
+      const initialQty: Record<string, number> = {};
+      const statusMap: Record<string, boolean> = {};
+      for (const rec of demoRecords) {
+        initialQty[rec.id] = rec.quantity;
+        const parsed = parseLensName(rec.lens_details.name);
+        statusMap[rec.id] = await isStockLens(parsed);
+      }
+      setSentOrderQuantities(initialQty);
+      setStockLensStatus(statusMap);
+      setSentLoading(false);
+      return;
+    }
+
+    const { data } = await supabase
+      .from('orders')
+      .select('id, lens_details, quantity, created_at, shop_id')
+      .gte('created_at', `${dateStr}T00:00:00`)
+      .lte('created_at', `${dateStr}T23:59:59`)
+      .order('created_at', { ascending: false });
+
+    const records = data || [];
+    setSentOrderRecords(records);
+
+    const initialQty: Record<string, number> = {};
+    const statusMap: Record<string, boolean> = {};
+
+    for (const rec of records) {
+      initialQty[rec.id] = rec.quantity;
+      const parsed = parseLensName(rec.lens_details?.name || '');
+      statusMap[rec.id] = await isStockLens(parsed);
+    }
+
+    setSentOrderQuantities(initialQty);
+    setStockLensStatus(statusMap);
+    setSentLoading(false);
+  };
+
+  const toggleSentSelect = (id: string) => {
+    setSentSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSentSelectAll = () => {
+    if (sentSelectedIds.size === sentOrderRecords.length) {
+      setSentSelectedIds(new Set());
+    } else {
+      setSentSelectedIds(new Set(sentOrderRecords.map(r => r.id)));
+    }
+  };
+
+  const handleSentQtyChange = (id: string, val: string) => {
+    const num = parseFloat(val);
+    setSentOrderQuantities(prev => ({
+      ...prev,
+      [id]: isNaN(num) ? 0 : num
+    }));
+  };
+
+  const updateSelectedInStock = async () => {
+    if (!sentSelectedIds.size) {
+      showToast('Select at least one lens to update in stock.', 'info');
+      return;
+    }
+
+    const selectedRecords = sentOrderRecords.filter(r => sentSelectedIds.has(r.id));
+    const stockRecords = selectedRecords.filter(r => stockLensStatus[r.id]);
+    const nonStockRecords = selectedRecords.filter(r => !stockLensStatus[r.id]);
+
+    if (stockRecords.length === 0) {
+      alert('Selected items me se koi bhi lens stock list me nahi hai. Non-stock custom lenses stock me add nahi honge.');
+      return;
+    }
+
+    if (isDemo) {
+      showToast(`Demo Mode: ${stockRecords.length} stock item(s) would be updated.`, 'info');
+      return;
+    }
+
+    setUpdateStockLoading(true);
+    let updatedCount = 0;
+    let lastError = null;
+
+    for (const record of stockRecords) {
+      const qtyToAdd = sentOrderQuantities[record.id] || record.quantity;
+      if (qtyToAdd <= 0) continue;
+
+      const parsed = parseLensName(record.lens_details?.name || '');
+      if (!parsed) continue;
+
+      const { data: existing } = await supabase
+        .from('lens_stock')
+        .select('id, quantity')
+        .eq('shop_id', record.shop_id)
+        .eq('material', parsed.material)
+        .eq('vision', parsed.vision)
+        .eq('sign', parsed.sign)
+        .eq('power_type', parsed.powerType)
+        .eq('sph', parseFloat(parsed.sph))
+        .eq('cyl', parseFloat(parsed.cyl))
+        .filter('coatings', 'eq', `{${parsed.coatings.join(',')}}`)
+        .maybeSingle();
+
+      const currentQty = existing ? Number(existing.quantity) : 0;
+      const newQty = currentQty + qtyToAdd;
+
+      const updateData = {
+        shop_id: record.shop_id,
+        material: parsed.material,
+        vision: parsed.vision,
+        sign: parsed.sign,
+        power_type: parsed.powerType,
+        sph: parseFloat(parsed.sph),
+        cyl: parseFloat(parsed.cyl),
+        axis: parsed.axis || null,
+        addition: parsed.add ? parseFloat(parsed.add) : null,
+        coatings: parsed.coatings,
+        quantity: newQty
+      };
+
+      const { error } = await supabase.from('lens_stock').upsert(updateData, {
+        onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings'
+      });
+
+      if (error) {
+        console.error('Update in stock error:', error);
+        lastError = error;
+      } else {
+        updatedCount++;
+      }
+    }
+
+    setUpdateStockLoading(false);
+
+    if (updatedCount > 0) {
+      let msg = `Successfully updated ${updatedCount} lens(es) in stock!`;
+      if (nonStockRecords.length > 0) {
+        msg += ` (${nonStockRecords.length} non-stock custom lens(es) skipped)`;
+      }
+      showToast(msg, 'success');
+    } else if (lastError) {
+      alert('Stock update failed: ' + (lastError as any).message);
+    }
   };
 
   const toggleSelect = (id: string) => {
@@ -331,6 +553,10 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       <div className="sticky top-[137px] sm:top-16 z-40 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm -mx-4 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shadow-sm">
         <h1 className="text-sm font-bold text-gray-900 dark:text-white">Place Order</h1>
         <div className="flex gap-2">
+          <button onClick={openSentOrdersModal}
+            className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-md flex items-center text-sm shadow-sm transition-colors">
+            <PackageCheck className="w-4 h-4 mr-1" /> Sent Orders
+          </button>
           <button onClick={openEditModal}
             className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm shadow-sm transition-colors">
             <Edit2 className="w-4 h-4 mr-1" /> Edit Order
@@ -510,6 +736,183 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           </table>
         </div>
       </div>
+
+      {/* ══ SENT ORDERS MODAL ══ */}
+      {showSentOrders && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-3xl mt-8 mb-8 flex flex-col">
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                {selectedDate && (
+                  <button onClick={() => { setSelectedDate(null); setSentOrderRecords([]); setSentSelectedIds(new Set()); }}
+                    className="mr-1 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 text-xs">
+                    ← Back
+                  </button>
+                )}
+                <div>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <PackageCheck className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    Sent Orders {selectedDate ? `- ${new Date(selectedDate).toLocaleDateString('en-GB')}` : ''}
+                  </h2>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    {selectedDate ? 'Check items and update directly into stock' : 'Select a date to view sent orders'}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowSentOrders(false)} className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            {!selectedDate ? (
+              /* Date Selection View */
+              <div className="p-5 max-h-[60vh] overflow-y-auto">
+                {sentLoading ? (
+                  <div className="flex items-center justify-center py-16 text-sm text-gray-400">
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading dates...
+                  </div>
+                ) : dateSummaries.length === 0 ? (
+                  <div className="text-center py-16 text-sm text-gray-400">Koi sent orders nahi mile.</div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {dateSummaries.map(summary => (
+                      <button
+                        key={summary.date}
+                        onClick={() => fetchOrdersForDate(summary.date)}
+                        className="flex flex-col items-start p-3 bg-gray-50 dark:bg-gray-800/80 hover:bg-purple-50 dark:hover:bg-purple-900/20 border border-gray-200 dark:border-gray-700 rounded-lg transition-all text-left group shadow-sm hover:border-purple-300 dark:hover:border-purple-600"
+                      >
+                        <div className="flex items-center justify-between w-full mb-2">
+                          <span className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                            {new Date(summary.date).toLocaleDateString('en-GB')}
+                          </span>
+                          <span className="text-[10px] bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-semibold">
+                            {summary.count} items
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                          Total Qty: <strong className="text-gray-700 dark:text-gray-300">{summary.totalQty} pairs</strong>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Order Details View for Selected Date */
+              <div className="flex flex-col flex-1">
+                {/* Action Bar */}
+                <div className="flex items-center justify-between px-5 py-2.5 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                      checked={sentOrderRecords.length > 0 && sentSelectedIds.size === sentOrderRecords.length}
+                      onChange={toggleSentSelectAll}
+                    />
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      {sentSelectedIds.size > 0 ? `${sentSelectedIds.size} selected` : 'Select All'}
+                    </span>
+                  </label>
+                  <button
+                    onClick={updateSelectedInStock}
+                    disabled={updateStockLoading || sentSelectedIds.size === 0}
+                    className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-1.5 rounded-md transition-colors disabled:opacity-50 shadow-sm"
+                  >
+                    {updateStockLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackageCheck className="w-3.5 h-3.5" />}
+                    Update in Stock ({sentSelectedIds.size})
+                  </button>
+                </div>
+
+                {/* Items Table */}
+                <div className="flex-1 overflow-y-auto max-h-[55vh]">
+                  {sentLoading ? (
+                    <div className="flex items-center justify-center py-16 text-sm text-gray-400">
+                      <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading orders...
+                    </div>
+                  ) : sentOrderRecords.length === 0 ? (
+                    <div className="text-center py-16 text-sm text-gray-400">Is date ke orders nahi mile.</div>
+                  ) : (
+                    <table className="w-full">
+                      <thead className="bg-gray-50 dark:bg-gray-800/80 sticky top-0">
+                        <tr>
+                          <th className="w-10 px-3 py-2"></th>
+                          <th className="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Lens Description</th>
+                          <th className="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-24">Shop</th>
+                          <th className="px-3 py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider w-28">Order Qty</th>
+                          <th className="px-3 py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider w-28">Stock Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {sentOrderRecords.map(record => {
+                          const isSelected = sentSelectedIds.has(record.id);
+                          const isStock = stockLensStatus[record.id];
+                          const qty = sentOrderQuantities[record.id] !== undefined ? sentOrderQuantities[record.id] : record.quantity;
+
+                          return (
+                            <tr key={record.id} className={`transition-colors ${isSelected ? 'bg-purple-50/60 dark:bg-purple-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 even:bg-gray-50/50 dark:even:bg-gray-800/20'}`}>
+                              <td className="px-3 py-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                  checked={isSelected}
+                                  onChange={() => toggleSentSelect(record.id)}
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <span className="text-xs font-medium text-gray-800 dark:text-gray-200">{record.lens_details?.name}</span>
+                              </td>
+                              <td className="px-3 py-2 text-[10px] text-gray-400 whitespace-nowrap">
+                                {getShopName(record.shop_id)}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  min="0.5"
+                                  value={qty}
+                                  onChange={(e) => handleSentQtyChange(record.id, e.target.value)}
+                                  className="w-20 text-xs font-bold text-center bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                {isStock ? (
+                                  <span className="text-[10px] font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-0.5 rounded-full border border-green-200 dark:border-green-800">
+                                    Stock Lens
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800" title="Custom Non-Stock power - stock me list nahi h isliye skip hoga">
+                                    Non-Stock
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
+              <span className="text-[10px] text-gray-400">
+                {selectedDate ? `${sentOrderRecords.length} items total` : `${dateSummaries.length} dates recorded`}
+              </span>
+              <button onClick={() => setShowSentOrders(false)}
+                className="px-4 py-1.5 text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+                Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* ══ EDIT ORDER MODAL ══ */}
       {showEditOrder && (

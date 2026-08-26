@@ -30,6 +30,19 @@ export interface Shop {
   name: string;
 }
 
+export interface ParsedLens {
+  material: Material;
+  vision: Vision;
+  sign: Sign;
+  powerType: PowerType;
+  sph: string;
+  cyl: string;
+  axis?: number;
+  add?: string;
+  coatings: string[];
+  compoundLimit: string;
+}
+
 export const MATERIALS: Material[] = ['CR', 'Poly', 'Glass'];
 export const VISIONS: Vision[] = ['single vision', 'KT', 'Prograssive'];
 export const DEFAULT_COATINGS = ['HC', 'HMC', 'Bluecut', 'Bluecut Dual coat', 'Bluecut Blue', 'Photo Grey'];
@@ -307,4 +320,152 @@ export function sortLensNames(a: string, b: string): number {
   }
 
   return a.localeCompare(b);
+}
+
+export function parseLensName(name: string): ParsedLens | null {
+  if (!name || typeof name !== 'string') return null;
+  let text = name.trim();
+
+  let vision: Vision = 'single vision';
+  if (/\bPrograssive\b/i.test(text)) {
+    vision = 'Prograssive';
+    text = text.replace(/\bPrograssive\b/i, '');
+  } else if (/\bKT\b/i.test(text)) {
+    vision = 'KT';
+    text = text.replace(/\bKT\b/i, '');
+  }
+
+  let material: Material = 'CR';
+  if (/\bGlass\b/i.test(text)) {
+    material = 'Glass';
+    text = text.replace(/\bGlass\b/i, '');
+  } else if (/\bPoly\b/i.test(text)) {
+    material = 'Poly';
+    text = text.replace(/\bPoly\b/i, '');
+  }
+
+  let add: string | undefined = undefined;
+  const addMatch = text.match(/\bADD \+?(\d+\.\d+)\b/i);
+  if (addMatch) {
+    add = parseFloat(addMatch[1]).toFixed(2);
+    text = text.replace(addMatch[0], '');
+  }
+
+  let axis: number | undefined = undefined;
+  const axisMatch = text.match(/\bAXIS (\d+)\b/i);
+  if (axisMatch) {
+    axis = parseInt(axisMatch[1], 10);
+    text = text.replace(axisMatch[0], '');
+  }
+
+  let powerType: PowerType | null = null;
+  let sign: Sign = '-';
+  let sph = '0.00';
+  let cyl = '0.00';
+
+  if (/\bPlano\b/i.test(text)) {
+    powerType = 'SPH';
+    sign = '-';
+    sph = '0.00';
+    cyl = '0.00';
+    text = text.replace(/\bPlano\b/i, '');
+  } else {
+    const sphMatch = text.match(/([+-])(\d+\.\d+)\s+SPH\b/i);
+    const cylMatch = text.match(/([+-])(\d+\.\d+)\s+CYL\b/i);
+    const compoundMatch = text.match(/([+-])(\d+\.\d+)\/([+-])(\d+\.\d+)/);
+
+    if (sphMatch) {
+      powerType = 'SPH';
+      sign = sphMatch[1] as Sign;
+      sph = parseFloat(sphMatch[2]).toFixed(2);
+      cyl = '0.00';
+      text = text.replace(sphMatch[0], '');
+    } else if (cylMatch) {
+      powerType = 'CYL';
+      sign = cylMatch[1] as Sign;
+      sph = '0.00';
+      cyl = parseFloat(cylMatch[2]).toFixed(2);
+      text = text.replace(cylMatch[0], '');
+    } else if (compoundMatch) {
+      const s1 = compoundMatch[1] as Sign;
+      const sphVal = parseFloat(compoundMatch[2]).toFixed(2);
+      const s2 = compoundMatch[3] as Sign;
+      const cylVal = parseFloat(compoundMatch[4]).toFixed(2);
+
+      if (s1 === s2) {
+        powerType = 'Compound';
+        sign = s1;
+      } else {
+        powerType = 'Cross Compound';
+        sign = s1;
+      }
+      sph = sphVal;
+      cyl = cylVal;
+      text = text.replace(compoundMatch[0], '');
+    }
+  }
+
+  if (!powerType) return null;
+
+  const knownCoatings = ['Photo Grey', 'Bluecut Dual coat', 'Bluecut Blue', 'Bluecut', 'HMC', 'HC'];
+  const foundCoatings: string[] = [];
+  let coatingText = text.trim();
+
+  for (const c of knownCoatings) {
+    const regex = new RegExp(`\\b${c.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'gi');
+    if (regex.test(coatingText)) {
+      foundCoatings.push(c);
+      coatingText = coatingText.replace(regex, '').trim();
+    }
+  }
+
+  const extraWords = coatingText.split(/\s+/).filter(Boolean);
+  if (extraWords.length > 0) {
+    foundCoatings.push(extraWords.join(' '));
+  }
+
+  const coatings = foundCoatings.length > 0 ? foundCoatings : ['HC'];
+  const compoundLimit = parseFloat(cyl) > 2.0 ? '4.0' : '2.0';
+
+  return {
+    material,
+    vision,
+    sign,
+    powerType,
+    sph,
+    cyl,
+    axis,
+    add,
+    coatings,
+    compoundLimit
+  };
+}
+
+export async function isStockLens(parsed: ParsedLens | null): Promise<boolean> {
+  if (!parsed) return false;
+  let custom = await fetchCustomLensRows(
+    parsed.material,
+    parsed.vision,
+    parsed.sign,
+    parsed.powerType,
+    parsed.compoundLimit,
+    parsed.coatings
+  );
+  if (!custom) {
+    custom = generateLensRows(parsed.powerType, parsed.compoundLimit, parsed.vision, parsed.sign);
+  }
+  if (parsed.sign === '+' && parsed.powerType === 'SPH') {
+    custom = custom.filter(row => parseFloat(row.sph) !== 0);
+  }
+
+  const sphVal = parseFloat(parsed.sph).toFixed(2);
+  const cylVal = parseFloat(parsed.cyl).toFixed(2);
+  const addVal = parsed.add ? parseFloat(parsed.add).toFixed(2) : undefined;
+
+  return custom.some(row => {
+    const rowSph = parseFloat(row.sph).toFixed(2);
+    const rowCyl = parseFloat(row.cyl).toFixed(2);
+    const rowAdd = row.add ? parseFloat(row.add).toFixed(2) : undefined;
+    return rowSph === sphVal && rowCyl === cylVal && rowAdd === addVal;
+  });
 }

@@ -126,7 +126,12 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
         return;
       }
       const { data: shopsData } = await supabase.from('shops').select('*');
-      if (shopsData) setShops(shopsData);
+      if (shopsData && shopsData.length > 0) {
+        setShops(shopsData);
+        if (shopsData.length === 1) {
+          setSelectedShop(shopsData[0].id);
+        }
+      }
       setLoading(false);
     }
     fetchShops();
@@ -672,27 +677,42 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
               {totalAlerts > 0 && <span className="bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{totalAlerts}</span>}
             </h3>
           </div>
-          <div className="p-3 grid grid-cols-2 gap-3">
-            <button onClick={() => setAlertView('combined')}
-              className="p-3 rounded-lg border border-orange-200 dark:border-orange-800/40 bg-orange-50 dark:bg-orange-900/10 hover:bg-orange-100 text-left transition-all group">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">Combined</span>
-                <ChevronRight className="w-3.5 h-3.5 text-orange-400 group-hover:translate-x-0.5 transition-transform" />
-              </div>
-              <p className="text-[10px] text-orange-500">
-                {combinedLowStock.length > 0 ? `${combinedLowStock.length} lens type${combinedLowStock.length !== 1 ? 's' : ''} low` : 'All stocked up'}
-              </p>
-            </button>
-            <button onClick={() => { setAlertView('individual'); setSelectedIndividualShop(null); }}
-              className="p-3 rounded-lg border border-orange-200 dark:border-orange-800/40 bg-orange-50 dark:bg-orange-900/10 hover:bg-orange-100 text-left transition-all group">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">Individual</span>
-                <ChevronRight className="w-3.5 h-3.5 text-orange-400 group-hover:translate-x-0.5 transition-transform" />
-              </div>
-              <p className="text-[10px] text-orange-500">
-                {shops.map(s => { const c = individualShopItems(s.id).length; return c > 0 ? `${s.name}: ${c}` : null; }).filter(Boolean).join(' · ') || 'All stocked up'}
-              </p>
-            </button>
+          <div className={`p-3 grid ${shops.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
+            {shops.length === 1 ? (
+              <button onClick={() => { setAlertView('individual'); setSelectedIndividualShop(shops[0]); }}
+                className="p-3 rounded-lg border border-orange-200 dark:border-orange-800/40 bg-orange-50 dark:bg-orange-900/10 hover:bg-orange-100 text-left transition-all group">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">{shops[0].name} Low Stock</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-orange-400 group-hover:translate-x-0.5 transition-transform" />
+                </div>
+                <p className="text-[10px] text-orange-500">
+                  {individualShopItems(shops[0].id).length > 0 ? `${individualShopItems(shops[0].id).length} lens type${individualShopItems(shops[0].id).length !== 1 ? 's' : ''} low` : 'All stocked up'}
+                </p>
+              </button>
+            ) : (
+              <>
+                <button onClick={() => setAlertView('combined')}
+                  className="p-3 rounded-lg border border-orange-200 dark:border-orange-800/40 bg-orange-50 dark:bg-orange-900/10 hover:bg-orange-100 text-left transition-all group">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">Combined</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-orange-400 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                  <p className="text-[10px] text-orange-500">
+                    {combinedLowStock.length > 0 ? `${combinedLowStock.length} lens type${combinedLowStock.length !== 1 ? 's' : ''} low` : 'All stocked up'}
+                  </p>
+                </button>
+                <button onClick={() => { setAlertView('individual'); setSelectedIndividualShop(null); }}
+                  className="p-3 rounded-lg border border-orange-200 dark:border-orange-800/40 bg-orange-50 dark:bg-orange-900/10 hover:bg-orange-100 text-left transition-all group">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">Individual</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-orange-400 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                  <p className="text-[10px] text-orange-500">
+                    {shops.map(s => { const c = individualShopItems(s.id).length; return c > 0 ? `${s.name}: ${c}` : null; }).filter(Boolean).join(' · ') || 'All stocked up'}
+                  </p>
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -81,11 +81,20 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function fetchShops() {
       if (isDemo) {
-        setShops([{ id: '1', name: 'Narbada Eye Care' }]);
+        const demoShops = [{ id: '1', name: 'Narbada Eye Care' }];
+        setShops(demoShops);
+        setSelectedShop(demoShops[0]);
+        setView('individual_shop');
         return;
       }
       const { data } = await supabase.from('shops').select('*');
-      if (data) setShops(data);
+      if (data && data.length > 0) {
+        setShops(data);
+        if (data.length === 1) {
+          setSelectedShop(data[0]);
+          setView('individual_shop');
+        }
+      }
     }
     fetchShops();
   }, [isDemo]);
@@ -405,7 +414,7 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
     const backMap: Partial<Record<ReportView, () => void>> = {
       individual: () => setView('home'),
       combined: () => setView('home'),
-      individual_shop: () => { setView('individual'); setSelectedShop(null); },
+      individual_shop: () => { if (shops.length > 1) { setView('individual'); setSelectedShop(null); } },
       individual_orders: () => { setView('individual_shop'); setOrderDates([]); },
       individual_orders_date: () => { setView('individual_orders'); setSelectedDate(null); },
       individual_sale: () => setView('individual_shop'),
@@ -422,7 +431,7 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const breadcrumbMap: Partial<Record<ReportView, string>> = {
     home: 'Reports', individual: 'Individual',
-    individual_shop: selectedShop?.name || 'Shop',
+    individual_shop: selectedShop?.name || 'Reports',
     individual_orders: 'Orders', individual_orders_date: selectedDate ? formatDate(selectedDate) : '',
     individual_sale: 'Sale', individual_orderedlensqty: 'Ordered lens quantity',
     individual_orderedlensqty_date: selectedDate ? formatDate(selectedDate) : '',
@@ -433,6 +442,17 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
   };
 
   const breadcrumbFlow: ReportView[] = (() => {
+    if (shops.length === 1) {
+      const singleFlows: Partial<Record<ReportView, ReportView[]>> = {
+        individual_shop: ['individual_shop'],
+        individual_orders: ['individual_shop', 'individual_orders'],
+        individual_orders_date: ['individual_shop', 'individual_orders', 'individual_orders_date'],
+        individual_sale: ['individual_shop', 'individual_sale'],
+        individual_orderedlensqty: ['individual_shop', 'individual_orderedlensqty'],
+        individual_orderedlensqty_date: ['individual_shop', 'individual_orderedlensqty', 'individual_orderedlensqty_date'],
+      };
+      if (singleFlows[view]) return singleFlows[view]!;
+    }
     const flows: Record<ReportView, ReportView[]> = {
       home: ['home'],
       individual: ['home', 'individual'],

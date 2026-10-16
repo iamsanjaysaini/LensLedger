@@ -17,7 +17,7 @@ export default function Auth() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
       <div className="px-8 py-8 text-left bg-white dark:bg-gray-800 shadow-xl rounded-2xl w-full max-w-md border border-gray-100 dark:border-gray-700">
-        <h3 className="text-2xl font-bold text-center text-indigo-600 dark:text-indigo-400 mb-8">SS Opticals LensLedger</h3>
+        <h3 className="text-2xl font-bold text-center text-indigo-600 dark:text-indigo-400 mb-8">Narbada Eye Care LensLedger</h3>
         <form onSubmit={handleLogin}>
           <div className="space-y-5">
             <div>

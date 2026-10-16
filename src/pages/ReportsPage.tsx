@@ -81,7 +81,7 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function fetchShops() {
       if (isDemo) {
-        setShops([{ id: '1', name: 'SS Opticals' }, { id: '2', name: 'Narbada Eye Care' }]);
+        setShops([{ id: '1', name: 'Narbada Eye Care' }]);
         return;
       }
       const { data } = await supabase.from('shops').select('*');

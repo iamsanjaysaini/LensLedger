@@ -49,7 +49,7 @@ export const DEFAULT_COATINGS = ['HC', 'HMC', 'Bluecut', 'Bluecut Dual coat', 'B
 
 // ✅ Default Shop Mapping — email ke hisaab se default shop name
 export const DEFAULT_SHOP_MAPPING: Record<string, string> = {
-  'iamsanjaysaini@gmail.com': 'SS Opticals',
+  'iamsanjaysaini@gmail.com': 'Narbada Eye Care',
   'sumitsainibrd@gmail.com': 'Narbada Eye Care',
 };
 

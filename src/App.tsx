@@ -65,7 +65,7 @@ function App() {
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <Link to="/" className="flex-shrink-0 flex flex-col justify-center group">
-                <span className="text-[10px] leading-tight font-bold text-gray-800 dark:text-gray-200 uppercase tracking-[0.2em] transition-all">S.S. Opticals</span>
+                <span className="text-[10px] leading-tight font-bold text-gray-800 dark:text-gray-200 uppercase tracking-[0.2em] transition-all">Narbada Eye Care</span>
                 <span className="text-xl font-bold text-black dark:text-white transition-all -mt-1">LensLedger</span>
               </Link>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">

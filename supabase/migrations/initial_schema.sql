@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS shops (
 );
 
 -- Seed shops
-INSERT INTO shops (name) VALUES ('SS Opticals'), ('Narbada Eye Care') ON CONFLICT (name) DO NOTHING;
+INSERT INTO shops (name) VALUES ('Narbada Eye Care') ON CONFLICT (name) DO NOTHING;
 
 -- Create lens_stock table
 CREATE TABLE IF NOT EXISTS lens_stock (

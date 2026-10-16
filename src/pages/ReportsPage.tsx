@@ -1,23 +1,15 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Shop, formatReportQty, sortLensNames } from '../utils/lensUtils';
-import { FileText, ChevronRight, ChevronLeft, Store, ShoppingCart, Tag, Layers } from 'lucide-react';
+import { FileText, ChevronRight, ChevronLeft, ShoppingCart, Tag, Layers } from 'lucide-react';
 
 type ReportView =
-  | 'home'
-  | 'individual'
   | 'individual_shop'
   | 'individual_orders'
   | 'individual_orders_date'
   | 'individual_sale'
   | 'individual_orderedlensqty'
-  | 'individual_orderedlensqty_date'
-  | 'combined'
-  | 'combined_orders'
-  | 'combined_orders_date'
-  | 'combined_sale'
-  | 'combined_orderedlensqty'
-  | 'combined_orderedlensqty_date';
+  | 'individual_orderedlensqty_date';
 
 function DateRangeForm({ onSearch, buttonText = "Show Report" }: { onSearch: (start: string, end: string) => void; buttonText?: string }) {
   const [localStart, setLocalStart] = useState('');
@@ -70,8 +62,7 @@ function DateRangeForm({ onSearch, buttonText = "Show Report" }: { onSearch: (st
 }
 
 export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
-  const [shops, setShops] = useState<Shop[]>([]);
-  const [view, setView] = useState<ReportView>('home');
+  const [view, setView] = useState<ReportView>('individual_shop');
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [orderDates, setOrderDates] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -81,19 +72,14 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function fetchShops() {
       if (isDemo) {
-        const demoShops = [{ id: '1', name: 'Narbada Eye Care' }];
-        setShops(demoShops);
-        setSelectedShop(demoShops[0]);
-        setView('individual_shop');
+        const demoShop = { id: '1', name: 'Narbada Eye Care' };
+        setSelectedShop(demoShop);
         return;
       }
       const { data } = await supabase.from('shops').select('*');
       if (data && data.length > 0) {
-        setShops(data);
-        if (data.length === 1) {
-          setSelectedShop(data[0]);
-          setView('individual_shop');
-        }
+        const narbada = data.find(s => s.name.toLowerCase().includes('narbada')) || data[0];
+        setSelectedShop(narbada);
       }
     }
     fetchShops();
@@ -108,21 +94,6 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
       .order('created_at', { ascending: false });
     if (data) {
       setOrderDates(Array.from(new Set(data.map(o => o.created_at.split('T')[0]))));
-    }
-    setLoading(false);
-  }
-
-  async function fetchCombinedOrdersForRange(start: string, end: string) {
-    setLoading(true);
-    const { data } = await supabase
-      .from('orders')
-      .select('lens_details, quantity')
-      .gte('created_at', `${start}T00:00:00`)
-      .lte('created_at', `${end}T23:59:59`);
-    if (data) {
-      const summary: Record<string, number> = {};
-      data.forEach(o => { summary[o.lens_details.name] = (summary[o.lens_details.name] || 0) + Number(o.quantity); });
-      setReportData(Object.entries(summary).map(([name, qty]) => ({ name, qty })).sort((a, b) => sortLensNames(a.name, b.name)));
     }
     setLoading(false);
   }
@@ -170,24 +141,6 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
     setLoading(false);
   }
 
-  function buildStockName(item: any): string {
-    const coating = Array.isArray(item.coatings) ? item.coatings.join(' ') : '';
-    const sign = item.sign || '';
-    let power = '';
-    if (item.power_type === 'SPH') power = Number(item.sph) === 0 ? 'Plano' : `${sign}${parseFloat(item.sph).toFixed(2)} SPH`;
-    else if (item.power_type === 'CYL') power = `${sign}${parseFloat(item.cyl).toFixed(2)} CYL`;
-    else if (item.power_type === 'Compound') power = `${sign}${parseFloat(item.sph).toFixed(2)}/${sign}${parseFloat(item.cyl).toFixed(2)}`;
-    else if (item.power_type === 'Cross Compound') {
-      const opp = sign === '+' ? '-' : '+';
-      power = `${sign}${parseFloat(item.sph).toFixed(2)}/${opp}${parseFloat(item.cyl).toFixed(2)}`;
-    }
-    const mat = item.material === 'CR' ? '' : item.material;
-    const vis = item.vision === 'single vision' ? '' : item.vision;
-    const add = item.addition ? `ADD +${parseFloat(item.addition).toFixed(2)}` : '';
-    const axis = item.axis ? `AXIS ${item.axis}` : '';
-    return [power, add, axis, coating, mat, vis].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-  }
-
   async function fetchLensQtyForShop(shopId: string) {
     setLoading(true);
     const { data } = await supabase.from('orders').select('lens_details, quantity').eq('shop_id', shopId);
@@ -229,91 +182,6 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
       .eq('shop_id', shopId)
       .gte('created_at', `${date}T00:00:00`)
       .lte('created_at', `${date}T23:59:59`);
-    if (data) {
-      const summary: Record<string, number> = {};
-      data.forEach(item => {
-        const name = item.lens_details?.name || '';
-        summary[name] = (summary[name] || 0) + Number(item.quantity);
-      });
-      setReportData(Object.entries(summary).map(([name, qty]) => ({ name, qty })).sort((a, b) => sortLensNames(a.name, b.name)));
-    }
-    setLoading(false);
-  }
-
-  async function fetchCombinedOrderDates() {
-    setLoading(true);
-    const { data } = await supabase.from('orders').select('created_at').order('created_at', { ascending: false });
-    if (data) {
-      setOrderDates(Array.from(new Set(data.map(o => o.created_at.split('T')[0]))));
-    }
-    setLoading(false);
-  }
-
-  async function fetchCombinedLensQtyRange(start: string, end: string) {
-    setLoading(true);
-    const { data } = await supabase
-      .from('orders')
-      .select('lens_details, quantity')
-      .gte('created_at', `${start}T00:00:00`)
-      .lte('created_at', `${end}T23:59:59`);
-    if (data) {
-      const summary: Record<string, number> = {};
-      data.forEach(item => {
-        const name = item.lens_details?.name || '';
-        summary[name] = (summary[name] || 0) + Number(item.quantity);
-      });
-      setReportData(Object.entries(summary).map(([name, qty]) => ({ name, qty })).sort((a, b) => sortLensNames(a.name, b.name)));
-    }
-    setLoading(false);
-  }
-
-  async function fetchCombinedLensQtyDate(date: string) {
-    setLoading(true);
-    const { data } = await supabase
-      .from('orders')
-      .select('lens_details, quantity')
-      .gte('created_at', `${date}T00:00:00`)
-      .lte('created_at', `${date}T23:59:59`);
-    if (data) {
-      const summary: Record<string, number> = {};
-      data.forEach(item => {
-        const name = item.lens_details?.name || '';
-        summary[name] = (summary[name] || 0) + Number(item.quantity);
-      });
-      setReportData(Object.entries(summary).map(([name, qty]) => ({ name, qty })).sort((a, b) => sortLensNames(a.name, b.name)));
-    }
-    setLoading(false);
-  }
-
-  async function fetchCombinedOrdersForDate(date: string) {
-    setLoading(true);
-    const { data } = await supabase
-      .from('orders')
-      .select('lens_details, quantity')
-      .gte('created_at', `${date}T00:00:00`)
-      .lte('created_at', `${date}T23:59:59`);
-    if (data) {
-      const summary: Record<string, number> = {};
-      data.forEach(o => { summary[o.lens_details.name] = (summary[o.lens_details.name] || 0) + Number(o.quantity); });
-      setReportData(Object.entries(summary).map(([name, qty]) => ({ name, qty })).sort((a, b) => sortLensNames(a.name, b.name)));
-    }
-    setLoading(false);
-  }
-
-  async function fetchCombinedSales() {
-    setLoading(true);
-    const { data } = await supabase.from('sales').select('lens_details, quantity');
-    if (data) {
-      const summary: Record<string, number> = {};
-      data.forEach(o => { summary[o.lens_details.name] = (summary[o.lens_details.name] || 0) + Number(o.quantity); });
-      setReportData(Object.entries(summary).map(([name, qty]) => ({ name, qty })).sort((a, b) => sortLensNames(a.name, b.name)));
-    }
-    setLoading(false);
-  }
-
-  async function fetchCombinedLensQty() {
-    setLoading(true);
-    const { data } = await supabase.from('orders').select('lens_details, quantity');
     if (data) {
       const summary: Record<string, number> = {};
       data.forEach(item => {
@@ -412,64 +280,34 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
   function handleBack() {
     setReportData([]);
     const backMap: Partial<Record<ReportView, () => void>> = {
-      individual: () => setView('home'),
-      combined: () => setView('home'),
-      individual_shop: () => { if (shops.length > 1) { setView('individual'); setSelectedShop(null); } },
       individual_orders: () => { setView('individual_shop'); setOrderDates([]); },
       individual_orders_date: () => { setView('individual_orders'); setSelectedDate(null); },
       individual_sale: () => setView('individual_shop'),
       individual_orderedlensqty: () => { setView('individual_shop'); setOrderDates([]); },
       individual_orderedlensqty_date: () => { setView('individual_orderedlensqty'); setSelectedDate(null); },
-      combined_orders: () => { setView('combined'); setOrderDates([]); },
-      combined_orders_date: () => { setView('combined_orders'); setSelectedDate(null); },
-      combined_sale: () => setView('combined'),
-      combined_orderedlensqty: () => { setView('combined'); setOrderDates([]); },
-      combined_orderedlensqty_date: () => { setView('combined_orderedlensqty'); setSelectedDate(null); },
     };
     backMap[view]?.();
   }
 
   const breadcrumbMap: Partial<Record<ReportView, string>> = {
-    home: 'Reports', individual: 'Individual',
     individual_shop: selectedShop?.name || 'Reports',
-    individual_orders: 'Orders', individual_orders_date: selectedDate ? formatDate(selectedDate) : '',
-    individual_sale: 'Sale', individual_orderedlensqty: 'Ordered lens quantity',
+    individual_orders: 'Orders',
+    individual_orders_date: selectedDate ? formatDate(selectedDate) : '',
+    individual_sale: 'Sale',
+    individual_orderedlensqty: 'Ordered lens quantity',
     individual_orderedlensqty_date: selectedDate ? formatDate(selectedDate) : '',
-    combined: 'Combined', combined_orders: 'Orders',
-    combined_orders_date: selectedDate ? formatDate(selectedDate) : '',
-    combined_sale: 'Sale', combined_orderedlensqty: 'Ordered lens quantity',
-    combined_orderedlensqty_date: selectedDate ? formatDate(selectedDate) : '',
   };
 
   const breadcrumbFlow: ReportView[] = (() => {
-    if (shops.length === 1) {
-      const singleFlows: Partial<Record<ReportView, ReportView[]>> = {
-        individual_shop: ['individual_shop'],
-        individual_orders: ['individual_shop', 'individual_orders'],
-        individual_orders_date: ['individual_shop', 'individual_orders', 'individual_orders_date'],
-        individual_sale: ['individual_shop', 'individual_sale'],
-        individual_orderedlensqty: ['individual_shop', 'individual_orderedlensqty'],
-        individual_orderedlensqty_date: ['individual_shop', 'individual_orderedlensqty', 'individual_orderedlensqty_date'],
-      };
-      if (singleFlows[view]) return singleFlows[view]!;
-    }
-    const flows: Record<ReportView, ReportView[]> = {
-      home: ['home'],
-      individual: ['home', 'individual'],
-      individual_shop: ['home', 'individual', 'individual_shop'],
-      individual_orders: ['home', 'individual', 'individual_shop', 'individual_orders'],
-      individual_orders_date: ['home', 'individual', 'individual_shop', 'individual_orders', 'individual_orders_date'],
-      individual_sale: ['home', 'individual', 'individual_shop', 'individual_sale'],
-      individual_orderedlensqty: ['home', 'individual', 'individual_shop', 'individual_orderedlensqty'],
-      individual_orderedlensqty_date: ['home', 'individual', 'individual_shop', 'individual_orderedlensqty', 'individual_orderedlensqty_date'],
-      combined: ['home', 'combined'],
-      combined_orders: ['home', 'combined', 'combined_orders'],
-      combined_orders_date: ['home', 'combined', 'combined_orders', 'combined_orders_date'],
-      combined_sale: ['home', 'combined', 'combined_sale'],
-      combined_orderedlensqty: ['home', 'combined', 'combined_orderedlensqty'],
-      combined_orderedlensqty_date: ['home', 'combined', 'combined_orderedlensqty', 'combined_orderedlensqty_date'],
+    const singleFlows: Partial<Record<ReportView, ReportView[]>> = {
+      individual_shop: ['individual_shop'],
+      individual_orders: ['individual_shop', 'individual_orders'],
+      individual_orders_date: ['individual_shop', 'individual_orders', 'individual_orders_date'],
+      individual_sale: ['individual_shop', 'individual_sale'],
+      individual_orderedlensqty: ['individual_shop', 'individual_orderedlensqty'],
+      individual_orderedlensqty_date: ['individual_shop', 'individual_orderedlensqty', 'individual_orderedlensqty_date'],
     };
-    return flows[view] || ['home'];
+    return singleFlows[view] || ['individual_shop'];
   })();
 
   const CardButton = ({ label, desc, icon, iconBg, onClick }: {
@@ -551,7 +389,7 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
 
       {/* Breadcrumb + Back */}
       <div className="flex items-center gap-1 flex-wrap text-xs text-gray-500 dark:text-gray-400">
-        {view !== 'home' && (
+        {view !== 'individual_shop' && (
           <button onClick={handleBack} className="flex items-center mr-2 text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
             <ChevronLeft className="w-3.5 h-3.5" /> Back
           </button>
@@ -564,25 +402,7 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
         ))}
       </div>
 
-      {/* HOME */}
-      {view === 'home' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <CardButton label="Individual" desc="Shop-wise reports" icon={<Store className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />} iconBg="bg-indigo-50 dark:bg-indigo-900/30" onClick={() => setView('individual')} />
-          <CardButton label="Combined" desc="Both shops combined" icon={<Layers className="w-5 h-5 text-purple-600 dark:text-purple-400" />} iconBg="bg-purple-50 dark:bg-purple-900/30" onClick={() => setView('combined')} />
-        </div>
-      )}
-
-      {/* INDIVIDUAL: Shop selection */}
-      {view === 'individual' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {shops.map(shop => (
-            <CardButton key={shop.id} label={shop.name} icon={<Store className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />} iconBg="bg-indigo-50 dark:bg-indigo-900/30"
-              onClick={() => { setSelectedShop(shop); setView('individual_shop'); }} />
-          ))}
-        </div>
-      )}
-
-      {/* INDIVIDUAL SHOP */}
+      {/* INDIVIDUAL SHOP MAIN REPORT CARD */}
       {view === 'individual_shop' && selectedShop && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <CardButton label="Orders" icon={<ShoppingCart className="w-5 h-5 text-blue-600 dark:text-blue-400" />} iconBg="bg-blue-50 dark:bg-blue-900/30"
@@ -640,66 +460,6 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
 
       {/* INDIVIDUAL LENS QTY DATE */}
       {view === 'individual_orderedlensqty_date' && selectedDate && (loading ? <Loader /> : <ReportTable items={reportData} title={`${selectedShop?.name} — Ordered lens quantity`} dateStr={formatDate(selectedDate)} />)}
-
-      {/* COMBINED */}
-      {view === 'combined' && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <CardButton label="Orders" icon={<ShoppingCart className="w-5 h-5 text-blue-600 dark:text-blue-400" />} iconBg="bg-blue-50 dark:bg-blue-900/30"
-            onClick={() => { fetchCombinedOrderDates(); setView('combined_orders'); }} />
-          <CardButton label="Sale" icon={<Tag className="w-5 h-5 text-green-600 dark:text-green-400" />} iconBg="bg-green-50 dark:bg-green-900/30"
-            onClick={() => { fetchCombinedSales(); setView('combined_sale'); }} />
-          <CardButton label="Ordered lens quantity" icon={<Layers className="w-5 h-5 text-purple-600 dark:text-purple-400" />} iconBg="bg-purple-50 dark:bg-purple-900/30"
-            onClick={() => { fetchCombinedOrderDates(); setView('combined_orderedlensqty'); }} />
-        </div>
-      )}
-
-      {/* COMBINED ORDERS: Dates */}
-      {view === 'combined_orders' && (
-        <>
-          <DateRangeForm onSearch={(start, end) => {
-            const rangeKey = `${start}:${end}`;
-            setSelectedDate(rangeKey);
-            fetchCombinedOrdersForRange(start, end);
-            setView('combined_orders_date');
-          }} />
-          <DateGrid dates={orderDates} iconColor="text-purple-400"
-            onSelect={(date) => { setSelectedDate(date); fetchCombinedOrdersForDate(date); setView('combined_orders_date'); }} />
-        </>
-      )}
-
-      {/* COMBINED ORDERS DATE */}
-      {view === 'combined_orders_date' && selectedDate && (loading ? <Loader /> : <ReportTable items={reportData} title="Combined Orders (Both Shops)" dateStr={formatDate(selectedDate)} />)}
-
-      {/* COMBINED SALE */}
-      {view === 'combined_sale' && (loading ? <Loader /> : <ReportTable items={reportData} title="Combined Sale Report (Both Shops)" />)}
-
-      {/* COMBINED LENS QTY */}
-      {view === 'combined_orderedlensqty' && (
-        <>
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm mb-5 flex justify-between items-center">
-            <div>
-              <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">All Time Report</h3>
-              <p className="text-[10px] text-gray-400">View ordered lens quantity from all recorded history.</p>
-            </div>
-            <button
-              onClick={() => { setSelectedDate('All Time'); fetchCombinedLensQty(); setView('combined_orderedlensqty_date'); }}
-              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer"
-            >
-              Show All Time
-            </button>
-          </div>
-          <DateRangeForm buttonText="Show Ordered Qty" onSearch={(start, end) => {
-            const rangeKey = `${start}:${end}`;
-            setSelectedDate(rangeKey);
-            fetchCombinedLensQtyRange(start, end);
-            setView('combined_orderedlensqty_date');
-          }} />
-          <DateGrid dates={orderDates} onSelect={(date) => { setSelectedDate(date); fetchCombinedLensQtyDate(date); setView('combined_orderedlensqty_date'); }} />
-        </>
-      )}
-
-      {/* COMBINED LENS QTY DATE */}
-      {view === 'combined_orderedlensqty_date' && selectedDate && (loading ? <Loader /> : <ReportTable items={reportData} title="Combined Ordered lens quantity (Both Shops)" dateStr={formatDate(selectedDate)} />)}
     </div>
   );
 }

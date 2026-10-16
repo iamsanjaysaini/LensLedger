@@ -119,7 +119,11 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
         setShops(demo); setSelectedShop(demo[0].id); return;
       }
       const { data } = await supabase.from('shops').select('*');
-      if (data?.length) { setShops(data); setSelectedShop(data[0].id); }
+      if (data?.length) {
+        const narbada = data.find(s => s.name.toLowerCase().includes('narbada')) || data[0];
+        setShops([narbada]);
+        setSelectedShop(narbada.id);
+      }
     }
     fetchShops();
   }, [isDemo]);
@@ -397,18 +401,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm space-y-3 border border-gray-200 dark:border-gray-700">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Shop</label>
-            <div className="flex gap-1.5">
-              {shops.map(shop => (
-                <button key={shop.id} onClick={() => setSelectedShop(shop.id)}
-                  className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${selectedShop === shop.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
-                  {shop.name}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Material</label>
             <div className="flex gap-1.5">
@@ -565,20 +558,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
               </button>
             </div>
 
-            {/* Shop filter */}
-            <div className="px-5 py-2.5 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mr-1">Shop:</span>
-              <button onClick={() => setFilterShopId('all')}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${filterShopId === 'all' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>
-                All
-              </button>
-              {shops.map(s => (
-                <button key={s.id} onClick={() => setFilterShopId(s.id)}
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${filterShopId === s.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>
-                  {s.name}
-                </button>
-              ))}
-            </div>
 
             {/* Action bar */}
             <div className="flex items-center justify-between px-5 py-2.5 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700">

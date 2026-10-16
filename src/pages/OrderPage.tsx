@@ -127,7 +127,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function fetchShops() {
       if (isDemo) {
-        const demo = [{ id: '1', name: 'SS Opticals' }, { id: '2', name: 'Narbada Eye Care' }];
+        const demo = [{ id: '1', name: 'Narbada Eye Care' }];
         setShops(demo); setSelectedShop(demo[0].id); return;
       }
       const { data } = await supabase.from('shops').select('*');

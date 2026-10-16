@@ -121,7 +121,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function fetchShops() {
       if (isDemo) {
-        setShops([{ id: '1', name: 'SS Opticals' }, { id: '2', name: 'Narbada Eye Care' }]);
+        setShops([{ id: '1', name: 'Narbada Eye Care' }]);
         setLoading(false);
         return;
       }
@@ -235,7 +235,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
       setLowStockItems([
         {
           lens_name: 'Plano HC',
-          shop_name: 'SS Opticals',
+          shop_name: 'Narbada Eye Care',
           shop_id: '1',
           quantity: 0.00,
           material: 'CR',
@@ -247,7 +247,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
         },
         {
           lens_name: '-0.50 SPH HC',
-          shop_name: 'SS Opticals',
+          shop_name: 'Narbada Eye Care',
           shop_id: '1',
           quantity: 1.00,
           material: 'CR',
@@ -256,18 +256,6 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
           power_type: 'SPH',
           coatings: ['HC'],
           alert_qty: 2.00
-        },
-        {
-          lens_name: '-0.25 SPH HC',
-          shop_name: 'Narbada Eye Care',
-          shop_id: '2',
-          quantity: 0.50,
-          material: 'CR',
-          vision: 'single vision',
-          sign: '-',
-          power_type: 'SPH',
-          coatings: ['HC'],
-          alert_qty: 1.00
         }
       ]);
       setAlertLoading(false);

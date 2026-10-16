@@ -97,8 +97,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     async function fetchShops() {
       if (isDemo) {
         const demoShops = [
-          { id: '1', name: 'SS Opticals' },
-          { id: '2', name: 'Narbada Eye Care' }
+          { id: '1', name: 'Narbada Eye Care' }
         ];
         setShops(demoShops);
         setSelectedShop(demoShops[0].id);

@@ -54,10 +54,13 @@ export const DEFAULT_SHOP_MAPPING: Record<string, string> = {
 };
 
 // ✅ Helper function — shops array aur email do, default shop id milega
-export function getDefaultShopId(shops: Shop[], email: string): string {
-  const shopName = DEFAULT_SHOP_MAPPING[email];
-  const matched = shopName ? shops.find(s => s.name === shopName) : null;
-  return matched ? matched.id : shops[0].id;
+export function getDefaultShopId(shops: Shop[], email?: string): string {
+  const shopName = email ? DEFAULT_SHOP_MAPPING[email] : 'Narbada Eye Care';
+  const matched = shops.find(s => s.name === (shopName || 'Narbada Eye Care'));
+  if (matched) return matched.id;
+  const narbada = shops.find(s => s.name.toLowerCase().includes('narbada'));
+  if (narbada) return narbada.id;
+  return shops[0]?.id || '';
 }
 
 export const PROTECTED_COATINGS = ['HC', 'HMC', 'Bluecut'];

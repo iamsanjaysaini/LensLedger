@@ -131,7 +131,11 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         setShops(demo); setSelectedShop(demo[0].id); return;
       }
       const { data } = await supabase.from('shops').select('*');
-      if (data?.length) { setShops(data); setSelectedShop(data[0].id); }
+      if (data?.length) {
+        const narbada = data.find(s => s.name.toLowerCase().includes('narbada')) || data[0];
+        setShops([narbada]);
+        setSelectedShop(narbada.id);
+      }
     }
     fetchShops();
   }, [isDemo]);
@@ -574,18 +578,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm space-y-3 border border-gray-200 dark:border-gray-700">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Shop</label>
-            <div className="flex gap-1.5">
-              {shops.map(shop => (
-                <button key={shop.id} onClick={() => setSelectedShop(shop.id)}
-                  className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${selectedShop === shop.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
-                  {shop.name}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Material</label>
             <div className="flex gap-1.5">

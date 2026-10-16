@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/Toast';
-import { Store, ChevronRight, FileText, Bell, ChevronLeft, AlertTriangle, Calendar, PackagePlus, Check, Loader2 } from 'lucide-react';
+import { ChevronRight, Bell, ChevronLeft, AlertTriangle, Calendar, PackagePlus, Check, Loader2 } from 'lucide-react';
 import { Shop, sortLensNames } from '../utils/lensUtils';
 
 interface LowStockItem {
@@ -17,15 +17,7 @@ interface LowStockItem {
   alert_qty: number;
 }
 
-interface CombinedLowStockItem {
-  lens_name: string;
-  total_quantity: number;
-  shops: { shop_name: string; quantity: number; alert_qty: number }[];
-}
-
-type AlertView = 'main' | 'combined' | 'individual';
-type IndividualShop = { id: string; name: string } | null;
-type MainView = 'dashboard' | 'combined-orders';
+type AlertView = 'main' | 'individual';
 
 function formatQty(qty: number): string {
   const whole = Math.floor(qty);
@@ -34,9 +26,7 @@ function formatQty(qty: number): string {
   return qty % 1 === 0 ? qty.toString() : qty.toFixed(2);
 }
 
-// lens_stock mein name se row dhundh ke quantity add karo
 async function addQtyToStockByName(shopId: string, lensName: string, qty: number): Promise<{ ok: boolean; msg: string }> {
-  // Fetch all lens_stock rows for this shop
   const { data, error } = await supabase
     .from('lens_stock')
     .select('id, quantity')
@@ -45,7 +35,6 @@ async function addQtyToStockByName(shopId: string, lensName: string, qty: number
   if (error) return { ok: false, msg: error.message };
   if (!data?.length) return { ok: false, msg: 'Is shop ki lens_stock mein koi entry nahi.' };
 
-  // Build name for each row same way as ReportsPage buildStockName
   function buildName(item: any): string {
     const coating = Array.isArray(item.coatings) ? item.coatings.join(' ') : '';
     const sign = item.sign || '';
@@ -64,7 +53,6 @@ async function addQtyToStockByName(shopId: string, lensName: string, qty: number
     return [power, add, axis, coating, mat, vis].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
   }
 
-  // Fetch full rows to build names
   const { data: fullRows } = await supabase
     .from('lens_stock')
     .select('*')
@@ -84,53 +72,34 @@ async function addQtyToStockByName(shopId: string, lensName: string, qty: number
 }
 
 export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
-  const [shops, setShops] = useState<Shop[]>([]);
-  const [selectedShop, setSelectedShop] = useState<string | null>(null);
+  const [shop, setShop] = useState<Shop | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [mainView, setMainView] = useState<MainView>('dashboard');
-
-  // Date-wise grouped orders (individual shop)
   const [dateGroups, setDateGroups] = useState<{ date: string; count: number; totalQty: number }[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dateOrders, setDateOrders] = useState<{ name: string; qty: number }[]>([]);
   const [dateOrdersLoading, setDateOrdersLoading] = useState(false);
 
-  // Combined orders date-wise
-  const [combinedDateGroups, setCombinedDateGroups] = useState<{ date: string; count: number; totalQty: number }[]>([]);
-  const [selectedCombinedDate, setSelectedCombinedDate] = useState<string | null>(null);
-  const [combinedDateOrders, setCombinedDateOrders] = useState<{ name: string; qty: number }[]>([]);
-  const [combinedDateOrdersLoading, setCombinedDateOrdersLoading] = useState(false);
-  const [combinedLoading, setCombinedLoading] = useState(false);
-
-  // Alert states
   const [alertView, setAlertView] = useState<AlertView>('main');
-  const [selectedIndividualShop, setSelectedIndividualShop] = useState<IndividualShop>(null);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [alertLoading, setAlertLoading] = useState(false);
 
-  // ─── EDIT & ADD TO STOCK states ────────────────────────────────
-  // editStockMode: which date+type is in edit mode ('combined-DATE' or 'shop-SHOPID-DATE')
   const [editStockMode, setEditStockMode] = useState<string | null>(null);
-  // editedQtys: { lensName: qty } — user-modified quantities
   const [editedQtys, setEditedQtys] = useState<Record<string, number>>({});
   const [stockUpdateLoading, setStockUpdateLoading] = useState(false);
-  // stockUpdateShop: for combined view, which shop to update stock for
-  const [stockUpdateShop, setStockUpdateShop] = useState<string>('');
 
   useEffect(() => {
     async function fetchShops() {
       if (isDemo) {
-        setShops([{ id: '1', name: 'Narbada Eye Care' }]);
+        const demoShop = { id: '1', name: 'Narbada Eye Care' };
+        setShop(demoShop);
         setLoading(false);
         return;
       }
       const { data: shopsData } = await supabase.from('shops').select('*');
       if (shopsData && shopsData.length > 0) {
-        setShops(shopsData);
-        if (shopsData.length === 1) {
-          setSelectedShop(shopsData[0].id);
-        }
+        const narbada = shopsData.find(s => s.name.toLowerCase().includes('narbada')) || shopsData[0];
+        setShop(narbada);
       }
       setLoading(false);
     }
@@ -138,12 +107,12 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   }, [isDemo]);
 
   useEffect(() => {
-    if (selectedShop && !isDemo) {
+    if (shop && !isDemo) {
       setSelectedDate(null);
       setDateOrders([]);
-      fetchDateGroups(selectedShop);
+      fetchDateGroups(shop.id);
     }
-  }, [selectedShop, isDemo]);
+  }, [shop, isDemo]);
 
   async function fetchDateGroups(shopId: string) {
     setLoading(true);
@@ -189,50 +158,6 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
       setDateOrders(sorted);
     }
     setDateOrdersLoading(false);
-  }
-
-  async function fetchCombinedDateGroups() {
-    setCombinedLoading(true);
-    const { data } = await supabase
-      .from('orders')
-      .select('created_at, quantity')
-      .order('created_at', { ascending: false });
-    if (data) {
-      const groups: Record<string, { count: number; totalQty: number }> = {};
-      data.forEach((o: any) => {
-        const date = o.created_at.split('T')[0];
-        if (!groups[date]) groups[date] = { count: 0, totalQty: 0 };
-        groups[date].count += 1;
-        groups[date].totalQty += Number(o.quantity);
-      });
-      const sorted = Object.entries(groups)
-        .sort((a, b) => b[0].localeCompare(a[0]))
-        .map(([date, val]) => ({ date, ...val }));
-      setCombinedDateGroups(sorted);
-    }
-    setCombinedLoading(false);
-  }
-
-  async function fetchCombinedOrdersForDate(date: string) {
-    setCombinedDateOrdersLoading(true);
-    setSelectedCombinedDate(date);
-    const { data } = await supabase
-      .from('orders')
-      .select('lens_details, quantity, shop_id')
-      .gte('created_at', `${date}T00:00:00`)
-      .lte('created_at', `${date}T23:59:59`);
-    if (data) {
-      const summary: Record<string, number> = {};
-      data.forEach((o: any) => {
-        const name = o.lens_details?.name || '';
-        summary[name] = (summary[name] || 0) + Number(o.quantity);
-      });
-      const sorted = Object.entries(summary)
-        .sort((a, b) => sortLensNames(a[0], b[0]))
-        .map(([name, qty]) => ({ name, qty }));
-      setCombinedDateOrders(sorted);
-    }
-    setCombinedDateOrdersLoading(false);
   }
 
   const fetchLowStockItems = useCallback(async () => {
@@ -325,30 +250,13 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     fetchLowStockItems();
   }, [fetchLowStockItems]);
 
-  const combinedLowStock: CombinedLowStockItem[] = (() => {
-    const map: Record<string, CombinedLowStockItem> = {};
-    lowStockItems.forEach(item => {
-      if (!map[item.lens_name]) map[item.lens_name] = { lens_name: item.lens_name, total_quantity: 0, shops: [] };
-      map[item.lens_name].total_quantity += item.quantity;
-      map[item.lens_name].shops.push({ shop_name: item.shop_name, quantity: item.quantity, alert_qty: item.alert_qty });
-    });
-    return Object.values(map).sort((a, b) => sortLensNames(a.lens_name, b.lens_name));
-  })();
-
-  const individualShopItems = (shopId: string) =>
-    lowStockItems.filter(item => item.shop_id === shopId).sort((a, b) => sortLensNames(a.lens_name, b.lens_name));
-
   const totalAlerts = lowStockItems.length;
 
-
-  // ─── EDIT & ADD TO STOCK helpers ───────────────────────────────
-  function enterEditMode(modeKey: string, orders: { name: string; qty: number }[], defaultShopId?: string) {
+  function enterEditMode(modeKey: string, orders: { name: string; qty: number }[]) {
     setEditStockMode(modeKey);
     const qtys: Record<string, number> = {};
     orders.forEach(o => { qtys[o.name] = o.qty; });
     setEditedQtys(qtys);
-    if (defaultShopId) setStockUpdateShop(defaultShopId);
-    else if (shops.length > 0) setStockUpdateShop(shops[0].id);
   }
 
   function cancelEditMode() {
@@ -356,8 +264,8 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     setEditedQtys({});
   }
 
-  async function updateToStock(orders: { name: string; qty: number }[], shopId: string, modeKey: string) {
-    if (!shopId) { showToast('Pehle shop select karo.', 'info'); return; }
+  async function updateToStock(orders: { name: string; qty: number }[], shopId: string) {
+    if (!shopId) { showToast('Shop error.', 'info'); return; }
     if (isDemo) { showToast('Demo Mode: Stock update not available.', 'info'); return; }
     setStockUpdateLoading(true);
     let ok = 0, fail = 0, failNames: string[] = [];
@@ -385,101 +293,19 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', weekday: 'short' });
   }
 
-  if (loading && shops.length === 0) return <div className="p-8 text-center text-sm">Loading Dashboard...</div>;
+  if (loading && !shop) return <div className="p-8 text-center text-sm">Loading Dashboard...</div>;
 
-  // ─── ALERT: COMBINED LOW STOCK ─────────────────────────────────
-  if (alertView === 'combined') {
+  if (alertView === 'individual') {
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <button onClick={() => setAlertView('main')} className="p-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition-colors">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Combined Low Stock</h1>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">{shop?.name || 'Narbada Eye Care'} — Low Stock</h1>
         </div>
         {alertLoading ? <div className="text-center text-sm text-gray-500 py-8">Loading...</div>
-          : combinedLowStock.length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
-              <AlertTriangle className="w-8 h-8 text-green-500 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No low stock items! All good.</p>
-            </div>
-          ) : (
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-800/80">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Lens</th>
-                    <th className="px-3 py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider w-24">Total Qty</th>
-                    <th className="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Shops</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {combinedLowStock.map((item, i) => (
-                    <tr key={i} className="hover:bg-orange-50/40 even:bg-gray-50 dark:even:bg-gray-700/30">
-                      <td className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300">{item.lens_name}</td>
-                      <td className="px-3 py-2 text-center text-xs font-bold text-orange-600">{formatQty(item.total_quantity)}</td>
-                      <td className="px-3 py-2 text-[10px] text-gray-500">
-                        {item.shops.map((s, j) => (
-                          <span key={j} className="mr-2">{s.shop_name}: <span className="font-semibold text-orange-500">{formatQty(s.quantity)} / {formatQty(s.alert_qty)}</span></span>
-                        ))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-      </div>
-    );
-  }
-
-  // ─── ALERT: INDIVIDUAL LOW STOCK ───────────────────────────────
-  if (alertView === 'individual' && !selectedIndividualShop) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <button onClick={() => setAlertView('main')} className="p-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition-colors">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Individual Low Stock</h1>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {shops.map(shop => {
-            const count = individualShopItems(shop.id).length;
-            return (
-              <button key={shop.id} onClick={() => setSelectedIndividualShop(shop)}
-                className="p-4 rounded-lg shadow-sm border-l-4 border-orange-400 bg-white dark:bg-gray-800 text-left flex justify-between items-center hover:shadow-md transition-all">
-                <div className="flex items-center gap-3">
-                  <Store className="w-5 h-5 text-orange-400" />
-                  <div>
-                    <p className="font-semibold text-sm text-gray-700 dark:text-gray-300">{shop.name}</p>
-                    <p className="text-[10px] mt-0.5">
-                      {count > 0 ? <span className="text-orange-500 font-medium">{count} low stock item{count !== 1 ? 's' : ''}</span>
-                        : <span className="text-green-500">All stock OK</span>}
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-gray-400" />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  if (alertView === 'individual' && selectedIndividualShop) {
-    const items = individualShopItems(selectedIndividualShop.id);
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <button onClick={() => setSelectedIndividualShop(null)} className="p-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition-colors">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">{selectedIndividualShop.name} — Low Stock</h1>
-        </div>
-        {alertLoading ? <div className="text-center text-sm text-gray-500 py-8">Loading...</div>
-          : items.length === 0 ? (
+          : lowStockItems.length === 0 ? (
             <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
               <AlertTriangle className="w-8 h-8 text-green-500 mx-auto mb-2" />
               <p className="text-sm text-gray-500">No low stock items!</p>
@@ -494,7 +320,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {items.map((item, i) => (
+                  {lowStockItems.map((item, i) => (
                     <tr key={i} className="hover:bg-orange-50/40 even:bg-gray-50 dark:even:bg-gray-700/30">
                       <td className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300">{item.lens_name}</td>
                       <td className="px-3 py-2 text-center text-xs font-bold text-orange-600">{formatQty(item.quantity)} / {formatQty(item.alert_qty)}</td>
@@ -508,240 +334,41 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     );
   }
 
-  // ─── COMBINED ORDERS VIEW ──────────────────────────────────────
-  if (mainView === 'combined-orders') {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <button onClick={() => { setMainView('dashboard'); setSelectedCombinedDate(null); setCombinedDateOrders([]); cancelEditMode(); }}
-            className="p-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition-colors">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Combined Orders — All Shops</h1>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 shadow-sm rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
-          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 flex items-center">
-            <Calendar className="w-4 h-4 mr-2 text-indigo-600 dark:text-indigo-400" />
-            <h3 className="text-sm font-medium text-gray-900 dark:text-white">Date-wise Combined Orders</h3>
-          </div>
-
-          {combinedLoading ? (
-            <div className="py-10 text-center text-sm text-gray-400">Loading...</div>
-          ) : combinedDateGroups.length === 0 ? (
-            <div className="py-10 text-center text-sm text-gray-400">Koi order nahi mila.</div>
-          ) : (
-            <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-              {combinedDateGroups.map((group) => {
-                const modeKey = `combined-${group.date}`;
-                const isEditMode = editStockMode === modeKey;
-                return (
-                  <li key={group.date}>
-                    <button
-                      onClick={() => {
-                        if (selectedCombinedDate === group.date) { setSelectedCombinedDate(null); cancelEditMode(); }
-                        else { cancelEditMode(); fetchCombinedOrdersForDate(group.date); }
-                      }}
-                      className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors ${
-                        selectedCombinedDate === group.date
-                          ? 'bg-indigo-50 dark:bg-indigo-900/20'
-                          : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
-                      }`}>
-                      <div className="flex items-center gap-3">
-                        <Calendar className={`w-4 h-4 ${selectedCombinedDate === group.date ? 'text-indigo-500' : 'text-gray-400'}`} />
-                        <div>
-                          <p className={`text-sm font-semibold ${selectedCombinedDate === group.date ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300'}`}>
-                            {formatDateDisplay(group.date)}
-                          </p>
-                          <p className="text-[10px] text-gray-400 mt-0.5">
-                            {group.count} order{group.count !== 1 ? 's' : ''} · Total: {formatQty(group.totalQty)} pair
-                          </p>
-                        </div>
-                      </div>
-                      <ChevronRight className={`w-4 h-4 transition-transform ${selectedCombinedDate === group.date ? 'rotate-90 text-indigo-400' : 'text-gray-400'}`} />
-                    </button>
-
-                    {selectedCombinedDate === group.date && (
-                      <div className="border-t border-indigo-100 dark:border-indigo-800/30 bg-indigo-50/30 dark:bg-indigo-900/10">
-                        {combinedDateOrdersLoading ? (
-                          <div className="py-6 text-center text-xs text-gray-400">Loading orders...</div>
-                        ) : combinedDateOrders.length === 0 ? (
-                          <div className="py-6 text-center text-xs text-gray-400">Koi order nahi mila.</div>
-                        ) : (
-                          <>
-                            {/* Edit & Add to Stock toolbar */}
-                            <div className="px-4 py-2.5 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-100 dark:border-indigo-800/30 flex flex-wrap items-center gap-2">
-                              {!isEditMode ? (
-                                <button
-                                  onClick={() => enterEditMode(modeKey, combinedDateOrders)}
-                                  className="flex items-center gap-1.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md transition-colors shadow-sm">
-                                  <PackagePlus className="w-3.5 h-3.5" /> Edit &amp; Add to Stock
-                                </button>
-                              ) : (
-                                <>
-                                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 mr-1">Shop:</span>
-                                  {shops.map(s => (
-                                    <button key={s.id} onClick={() => setStockUpdateShop(s.id)}
-                                      className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${
-                                        stockUpdateShop === s.id
-                                          ? 'bg-emerald-600 text-white border-emerald-600'
-                                          : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'
-                                      }`}>
-                                      {s.name}
-                                    </button>
-                                  ))}
-                                  <div className="ml-auto flex gap-2">
-                                    <button
-                                      onClick={() => updateToStock(combinedDateOrders, stockUpdateShop, modeKey)}
-                                      disabled={stockUpdateLoading}
-                                      className="flex items-center gap-1.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-md transition-colors shadow-sm">
-                                      {stockUpdateLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                                      Update to Stock
-                                    </button>
-                                    <button onClick={cancelEditMode}
-                                      className="text-[11px] font-medium bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded-md transition-colors">
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-
-                            <table className="w-full">
-                              <thead className="bg-indigo-50 dark:bg-indigo-900/20">
-                                <tr>
-                                  <th className="px-4 py-2 text-left text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Lens Name</th>
-                                  <th className="px-4 py-2 text-right text-[10px] font-bold text-indigo-500 uppercase tracking-wider w-28">
-                                    {isEditMode ? 'Edit Qty' : 'Qty (Pair)'}
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-indigo-100 dark:divide-indigo-800/20">
-                                {combinedDateOrders.map((order, i) => (
-                                  <tr key={i} className="even:bg-indigo-50/50 dark:even:bg-indigo-900/10">
-                                    <td className="px-4 py-2 text-xs text-gray-700 dark:text-gray-300 font-medium">{order.name}</td>
-                                    <td className="px-4 py-2 text-right">
-                                      {isEditMode ? (
-                                        <input
-                                          type="number"
-                                          step="0.5"
-                                          min="0"
-                                          value={editedQtys[order.name] ?? order.qty}
-                                          onChange={(e) => setEditedQtys(prev => ({ ...prev, [order.name]: parseFloat(e.target.value) || 0 }))}
-                                          className="w-20 text-xs text-right bg-white dark:bg-gray-900 border border-emerald-400 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-emerald-700 dark:text-emerald-400"
-                                        />
-                                      ) : (
-                                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                                          {formatQty(order.qty)}
-                                        </span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ─── MAIN DASHBOARD ────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={() => { setMainView('combined-orders'); fetchCombinedDateGroups(); }}
-            className="flex items-center text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md transition-colors">
-            <FileText className="w-4 h-4 mr-1" /> Last Combined Order
-          </button>
-        </div>
       </div>
 
       {/* Alerts */}
-      {true && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-orange-200 dark:border-orange-800/50 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-orange-100 dark:border-orange-800/30 bg-orange-50 dark:bg-orange-900/10 flex items-center">
-            <h3 className="text-sm font-semibold text-orange-700 dark:text-orange-400 flex items-center gap-2">
-              <Bell className="w-4 h-4" /> Alerts
-              {totalAlerts > 0 && <span className="bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{totalAlerts}</span>}
-            </h3>
-          </div>
-          <div className={`p-3 grid ${shops.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
-            {shops.length === 1 ? (
-              <button onClick={() => { setAlertView('individual'); setSelectedIndividualShop(shops[0]); }}
-                className="p-3 rounded-lg border border-orange-200 dark:border-orange-800/40 bg-orange-50 dark:bg-orange-900/10 hover:bg-orange-100 text-left transition-all group">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">{shops[0].name} Low Stock</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-orange-400 group-hover:translate-x-0.5 transition-transform" />
-                </div>
-                <p className="text-[10px] text-orange-500">
-                  {individualShopItems(shops[0].id).length > 0 ? `${individualShopItems(shops[0].id).length} lens type${individualShopItems(shops[0].id).length !== 1 ? 's' : ''} low` : 'All stocked up'}
-                </p>
-              </button>
-            ) : (
-              <>
-                <button onClick={() => setAlertView('combined')}
-                  className="p-3 rounded-lg border border-orange-200 dark:border-orange-800/40 bg-orange-50 dark:bg-orange-900/10 hover:bg-orange-100 text-left transition-all group">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">Combined</span>
-                    <ChevronRight className="w-3.5 h-3.5 text-orange-400 group-hover:translate-x-0.5 transition-transform" />
-                  </div>
-                  <p className="text-[10px] text-orange-500">
-                    {combinedLowStock.length > 0 ? `${combinedLowStock.length} lens type${combinedLowStock.length !== 1 ? 's' : ''} low` : 'All stocked up'}
-                  </p>
-                </button>
-                <button onClick={() => { setAlertView('individual'); setSelectedIndividualShop(null); }}
-                  className="p-3 rounded-lg border border-orange-200 dark:border-orange-800/40 bg-orange-50 dark:bg-orange-900/10 hover:bg-orange-100 text-left transition-all group">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">Individual</span>
-                    <ChevronRight className="w-3.5 h-3.5 text-orange-400 group-hover:translate-x-0.5 transition-transform" />
-                  </div>
-                  <p className="text-[10px] text-orange-500">
-                    {shops.map(s => { const c = individualShopItems(s.id).length; return c > 0 ? `${s.name}: ${c}` : null; }).filter(Boolean).join(' · ') || 'All stocked up'}
-                  </p>
-                </button>
-              </>
-            )}
-          </div>
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-orange-200 dark:border-orange-800/50 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-orange-100 dark:border-orange-800/30 bg-orange-50 dark:bg-orange-900/10 flex items-center">
+          <h3 className="text-sm font-semibold text-orange-700 dark:text-orange-400 flex items-center gap-2">
+            <Bell className="w-4 h-4" /> Alerts
+            {totalAlerts > 0 && <span className="bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{totalAlerts}</span>}
+          </h3>
         </div>
-      )}
-
-      {/* Shop Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {shops.map((shop) => (
-          <button key={shop.id} onClick={() => setSelectedShop(selectedShop === shop.id ? null : shop.id)}
-            className={`p-4 rounded-lg shadow-sm border-l-4 transition-all text-left flex justify-between items-center ${
-              selectedShop === shop.id
-                ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-600 ring-1 ring-indigo-600'
-                : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300'
-            }`}>
-            <div className="flex items-center space-x-3">
-              <Store className={`w-5 h-5 ${selectedShop === shop.id ? 'text-indigo-600' : 'text-gray-400'}`} />
-              <span className={`font-semibold text-sm ${selectedShop === shop.id ? 'text-indigo-900 dark:text-indigo-100' : 'text-gray-700 dark:text-gray-300'}`}>{shop.name}</span>
+        <div className="p-3 grid grid-cols-1 gap-3">
+          <button onClick={() => setAlertView('individual')}
+            className="p-3 rounded-lg border border-orange-200 dark:border-orange-800/40 bg-orange-50 dark:bg-orange-900/10 hover:bg-orange-100 text-left transition-all group">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">{shop?.name || 'Narbada Eye Care'} Low Stock</span>
+              <ChevronRight className="w-3.5 h-3.5 text-orange-400 group-hover:translate-x-0.5 transition-transform" />
             </div>
-            <ChevronRight className={`w-4 h-4 transition-transform ${selectedShop === shop.id ? 'rotate-90 text-indigo-400' : 'text-gray-400'}`} />
+            <p className="text-[10px] text-orange-500">
+              {lowStockItems.length > 0 ? `${lowStockItems.length} lens type${lowStockItems.length !== 1 ? 's' : ''} low` : 'All stocked up'}
+            </p>
           </button>
-        ))}
+        </div>
       </div>
 
-      {/* Date-wise orders for selected shop */}
-      {selectedShop && (
+      {/* Date-wise orders for Narbada Eye Care */}
+      {shop && (
         <div className="bg-white dark:bg-gray-800 shadow-sm rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
           <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 flex items-center">
             <Calendar className="w-4 h-4 mr-2 text-indigo-600 dark:text-indigo-400" />
             <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-              {shops.find(s => s.id === selectedShop)?.name} — Order History
+              {shop.name} — Order History
             </h3>
           </div>
           {loading ? (
@@ -751,14 +378,14 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
           ) : (
             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
               {dateGroups.map((group) => {
-                const modeKey = `shop-${selectedShop}-${group.date}`;
+                const modeKey = `shop-${shop.id}-${group.date}`;
                 const isEditMode = editStockMode === modeKey;
                 return (
                   <li key={group.date}>
                     <button
                       onClick={() => {
                         if (selectedDate === group.date) { setSelectedDate(null); cancelEditMode(); }
-                        else { cancelEditMode(); fetchOrdersForDate(selectedShop, group.date); }
+                        else { cancelEditMode(); fetchOrdersForDate(shop.id, group.date); }
                       }}
                       className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors ${
                         selectedDate === group.date ? 'bg-indigo-50 dark:bg-indigo-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
@@ -789,18 +416,18 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                             <div className="px-4 py-2.5 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-100 dark:border-indigo-800/30 flex items-center gap-2">
                               {!isEditMode ? (
                                 <button
-                                  onClick={() => enterEditMode(modeKey, dateOrders, selectedShop)}
+                                  onClick={() => enterEditMode(modeKey, dateOrders)}
                                   className="flex items-center gap-1.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md transition-colors shadow-sm">
                                   <PackagePlus className="w-3.5 h-3.5" /> Edit &amp; Add to Stock
                                 </button>
                               ) : (
                                 <div className="flex items-center gap-2 w-full">
                                   <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                                    {shops.find(s => s.id === selectedShop)?.name}
+                                    {shop.name}
                                   </span>
                                   <div className="ml-auto flex gap-2">
                                     <button
-                                      onClick={() => updateToStock(dateOrders, selectedShop, modeKey)}
+                                      onClick={() => updateToStock(dateOrders, shop.id)}
                                       disabled={stockUpdateLoading}
                                       className="flex items-center gap-1.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-md transition-colors shadow-sm">
                                       {stockUpdateLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}

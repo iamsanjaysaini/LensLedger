@@ -40,7 +40,6 @@ export interface ParsedLens {
   axis?: number;
   add?: string;
   coatings: string[];
-  compoundLimit: string;
 }
 
 export const MATERIALS: Material[] = ['CR', 'Poly', 'Glass'];
@@ -79,7 +78,6 @@ export async function fetchCustomLensRows(
   vision: Vision,
   sign: Sign | null,
   powerType: PowerType,
-  compoundLimit: string = '2.0',
   coatings: string[] = []
 ): Promise<CustomLensRow[] | null> {
   let query = supabase
@@ -88,7 +86,6 @@ export async function fetchCustomLensRows(
     .eq('material', material)
     .eq('vision', vision)
     .eq('power_type', powerType)
-    .eq('compound_limit', compoundLimit)
     .filter('coatings', 'eq', `{${coatings.join(',')}}`);
 
   if (sign === null) {
@@ -118,7 +115,6 @@ export async function saveCustomLensRows(
   vision: Vision,
   sign: Sign | null,
   powerType: PowerType,
-  compoundLimit: string = '2.0',
   rows: CustomLensRow[],
   coatings: string[] = []
 ) {
@@ -128,7 +124,6 @@ export async function saveCustomLensRows(
     .eq('material', material)
     .eq('vision', vision)
     .eq('power_type', powerType)
-    .eq('compound_limit', compoundLimit)
     .filter('coatings', 'eq', `{${coatings.join(',')}}`);
 
   if (sign === null) {
@@ -149,7 +144,6 @@ export async function saveCustomLensRows(
     vision,
     sign,
     power_type: powerType,
-    compound_limit: compoundLimit,
     coatings,
     sph: parseFloat(row.sph),
     cyl: parseFloat(row.cyl),
@@ -169,7 +163,7 @@ export async function saveCustomLensRows(
   return { success: true };
 }
 
-export function generateLensRows(powerType: PowerType, compoundLimit: string = '2.0', vision: Vision = 'single vision', sign: Sign | null = null) {
+export function generateLensRows(powerType: PowerType, vision: Vision = 'single vision', sign: Sign | null = null) {
   const rows: CustomLensRow[] = [];
   const isKT = vision === 'KT';
   const isProg = vision === 'Prograssive';
@@ -196,14 +190,8 @@ export function generateLensRows(powerType: PowerType, compoundLimit: string = '
       });
     });
   } else if (powerType === 'Compound' || powerType === 'Cross Compound') {
-    let cylStart = 0.25;
-    let cylEnd = 2.0;
-
-    if (compoundLimit === '4.0' && !isKTOrProg) {
-      cylStart = 2.25;
-      cylEnd = 4.0;
-    }
-
+    const cylStart = 0.25;
+    const cylEnd = 2.0;
     const sphMax = isKT ? 3.0 : 6.0;
 
     for (let s = 0.25; s <= sphMax; s += 0.25) {
@@ -428,7 +416,6 @@ export function parseLensName(name: string): ParsedLens | null {
   }
 
   const coatings = foundCoatings.length > 0 ? foundCoatings : ['HC'];
-  const compoundLimit = parseFloat(cyl) > 2.0 ? '4.0' : '2.0';
 
   return {
     material,
@@ -439,8 +426,7 @@ export function parseLensName(name: string): ParsedLens | null {
     cyl,
     axis,
     add,
-    coatings,
-    compoundLimit
+    coatings
   };
 }
 
@@ -451,11 +437,10 @@ export async function isStockLens(parsed: ParsedLens | null): Promise<boolean> {
     parsed.vision,
     parsed.sign,
     parsed.powerType,
-    parsed.compoundLimit,
     parsed.coatings
   );
   if (!custom) {
-    custom = generateLensRows(parsed.powerType, parsed.compoundLimit, parsed.vision, parsed.sign);
+    custom = generateLensRows(parsed.powerType, parsed.vision, parsed.sign);
   }
   if (parsed.sign === '+' && parsed.powerType === 'SPH') {
     custom = custom.filter(row => parseFloat(row.sph) !== 0);

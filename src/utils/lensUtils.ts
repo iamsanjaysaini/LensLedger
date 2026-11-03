@@ -214,7 +214,7 @@ export function generateLensRows(powerType: PowerType, vision: Vision = 'single 
 
 export function getDefaultAxis(vision: Vision, sign: Sign | null, powerType: PowerType): number | undefined {
   if (vision !== 'KT') return undefined;
-  if (powerType === 'SPH') return undefined;
+  if (powerType === 'SPH' || powerType === 'Cross Compound') return undefined;
 
   if (sign === '+') return 180;
   if (sign === '-') return 90;
@@ -263,7 +263,7 @@ export function formatLensName(
   }
 
   let axisPart = '';
-  if ((powerType !== 'SPH') && (isKT || isProg)) {
+  if (powerType !== 'SPH' && powerType !== 'Cross Compound' && (isKT || isProg)) {
     axisPart = axis ? `AXIS ${axis}` : '';
   }
 

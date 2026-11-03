@@ -554,11 +554,29 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     const add = newRowPower.add ? parseFloat(newRowPower.add) : undefined;
     if (isNaN(sph) || isNaN(cyl)) { alert('Please enter valid SPH and CYL numbers.'); return; }
     if ((vision === 'KT' || vision === 'Prograssive') && (add === undefined || isNaN(add))) { alert('Please enter a valid ADD number.'); return; }
+
+    const sphFixed = sph.toFixed(2);
+    const cylFixed = cyl.toFixed(2);
+    const addFixed = add !== undefined ? add.toFixed(2) : undefined;
+
+    // Check if this power entry already exists in the list
+    const isDuplicate = customRows.some(row => {
+      const rowSph = parseFloat(row.sph).toFixed(2);
+      const rowCyl = parseFloat(row.cyl).toFixed(2);
+      const rowAdd = row.add !== undefined && row.add !== '' ? parseFloat(row.add).toFixed(2) : undefined;
+      return rowSph === sphFixed && rowCyl === cylFixed && rowAdd === addFixed;
+    });
+
+    if (isDuplicate) {
+      alert('Yeh power list mein pehle se maujood hai! Ek power ki entry sirf ek bar hi ho sakti hai.');
+      return;
+    }
+
     const newRows = [...customRows];
     newRows.splice(insertAt, 0, {
-      sph: sph.toFixed(2),
-      cyl: cyl.toFixed(2),
-      add: add !== undefined ? add.toFixed(2) : undefined
+      sph: sphFixed,
+      cyl: cylFixed,
+      add: addFixed
     });
     setCustomRows(newRows);
     setInsertAt(null);

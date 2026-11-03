@@ -103,11 +103,27 @@ export async function fetchCustomLensRows(
 
   if (!data || data.length === 0) return null;
 
-  return data.map(row => ({
-    sph: row.sph.toFixed(2),
-    cyl: row.cyl.toFixed(2),
-    add: row.addition ? row.addition.toFixed(2) : undefined
-  }));
+  // Deduplicate rows to prevent any duplicate power appearing in the list
+  const seen = new Set<string>();
+  const uniqueRows: CustomLensRow[] = [];
+
+  for (const row of data) {
+    const sphStr = row.sph.toFixed(2);
+    const cylStr = row.cyl.toFixed(2);
+    const addStr = row.addition ? row.addition.toFixed(2) : undefined;
+    const key = `${sphStr}:${cylStr}:${addStr || ''}`;
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueRows.push({
+        sph: sphStr,
+        cyl: cylStr,
+        add: addStr
+      });
+    }
+  }
+
+  return uniqueRows;
 }
 
 export async function saveCustomLensRows(
@@ -139,7 +155,21 @@ export async function saveCustomLensRows(
     return { error: deleteError };
   }
 
-  const inserts = rows.map((row, index) => ({
+  // Deduplicate rows before saving to prevent any duplicates
+  const seen = new Set<string>();
+  const uniqueRows: CustomLensRow[] = [];
+  for (const r of rows) {
+    const sphFixed = parseFloat(r.sph).toFixed(2);
+    const cylFixed = parseFloat(r.cyl).toFixed(2);
+    const addFixed = r.add ? parseFloat(r.add).toFixed(2) : '';
+    const key = `${sphFixed}:${cylFixed}:${addFixed}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueRows.push(r);
+    }
+  }
+
+  const inserts = uniqueRows.map((row, index) => ({
     material,
     vision,
     sign,

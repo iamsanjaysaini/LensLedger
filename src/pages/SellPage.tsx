@@ -46,7 +46,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   const [coatings, setCoatings] = useState<string[]>(['HC']);
   const [sign, setSign] = useState<Sign>('-');
   const [powerType, setPowerType] = useState<PowerType>('SPH');
-  const [compoundLimit, setCompoundLimit] = useState('2.0');
   const [rowAxes, setRowAxes] = useState<Record<string, number>>({});
   const [customCoating, setCustomCoating] = useState('');
   const [availableCoatings, setAvailableCoatings] = useState<string[]>(() => {
@@ -84,9 +83,9 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function loadRows() {
       setLoading(true);
-      let custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
+      let custom = await fetchCustomLensRows(material, vision, sign, powerType, coatings);
       if (!custom) {
-        custom = generateLensRows(powerType, compoundLimit, vision, sign);
+        custom = generateLensRows(powerType, vision, sign);
       }
       if (sign === '+' && powerType === 'SPH') {
         custom = custom.filter(row => parseFloat(row.sph) !== 0);
@@ -95,11 +94,17 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
       setLoading(false);
     }
     loadRows();
-  }, [material, vision, sign, powerType, compoundLimit, coatings]);
+  }, [material, vision, sign, powerType, coatings]);
 
   const lensRows = customRows;
 
+  const showAxis = powerType !== 'SPH' && !(powerType === 'Compound' && vision === 'single vision');
+
   useEffect(() => {
+    if (!showAxis) {
+      setRowAxes({});
+      return;
+    }
     const defaultAxis = getDefaultAxis(vision, sign, powerType);
     if (defaultAxis !== undefined) {
       const newAxes: Record<string, number> = {};
@@ -110,7 +115,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     } else {
       setRowAxes({});
     }
-  }, [vision, sign, powerType, lensRows]);
+  }, [vision, sign, powerType, lensRows, showAxis]);
 
   useEffect(() => {
     async function fetchShops() {
@@ -132,7 +137,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     if (selectedShop && !isDemo) fetchStock();
     setDeltas({});
     setOriginalStock({});  // Clear stale stock on filter change
-  }, [selectedShop, material, vision, coatings, sign, powerType, compoundLimit, isDemo]);
+  }, [selectedShop, material, vision, coatings, sign, powerType, isDemo]);
 
   async function fetchStock() {
     setLoading(true);
@@ -143,8 +148,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
         .eq('coatings', `{${coatings.join(',')}}`);
       if (powerType === 'SPH') query = query.eq('cyl', 0);
       else if (powerType === 'CYL') query = query.gt('cyl', 0).lte('cyl', 6.0);
-      else if (compoundLimit === '2.0') query = query.gte('cyl', 0.25).lte('cyl', 2.0);
-      else query = query.gte('cyl', 2.25).lte('cyl', 4.0);
+      else query = query.gte('cyl', 0.25);
 
       const { data, error } = await query;
       if (error) throw error;
@@ -441,15 +445,6 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
               <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
             </div>
           </div>
-          {(powerType === 'Compound' || powerType === 'Cross Compound') && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Range</label>
-              <div className="flex gap-1.5 mt-1">
-                <button onClick={() => setCompoundLimit('2.0')} className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '2.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>upto 2.0 cyl</button>
-                <button onClick={() => setCompoundLimit('4.0')} className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '4.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>upto 4 cyl</button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Coatings */}
@@ -490,7 +485,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
             <thead className="bg-gray-50 dark:bg-gray-800/80 text-center">
               <tr>
                 <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-48">Description</th>
-                {powerType !== 'SPH' && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Axis</th>}
+                {showAxis && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Axis</th>}
                 <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Stock</th>
                 <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Sell Qty</th>
                 <th className="px-2 py-1.5 text-right text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-20">Actions</th>
@@ -507,7 +502,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
                 return (
                   <tr key={rowKey} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300 w-48">{name}</td>
-                    {powerType !== 'SPH' && (
+                    {showAxis && (
                       <td className="px-1 py-1.5 text-center">
                         <select value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [rowKey]: parseInt(e.target.value) })}
                           className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14">

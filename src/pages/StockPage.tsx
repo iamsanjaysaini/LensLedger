@@ -30,7 +30,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [coatings, setCoatings] = useState<string[]>(['HC']);
   const [sign, setSign] = useState<Sign>('-');
   const [powerType, setPowerType] = useState<PowerType>('SPH');
-  const [compoundLimit, setCompoundLimit] = useState('2.0');
   const [rowAxes, setRowAxes] = useState<Record<string, number>>({});
   const [customCoating, setCustomCoating] = useState('');
   const [availableCoatings, setAvailableCoatings] = useState<string[]>(() => {
@@ -65,9 +64,9 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     async function loadRows() {
       setLoading(true);
-      let custom = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
+      let custom = await fetchCustomLensRows(material, vision, sign, powerType, coatings);
       if (!custom) {
-        custom = generateLensRows(powerType, compoundLimit, vision, sign);
+        custom = generateLensRows(powerType, vision, sign);
       }
       if (sign === '+' && powerType === 'SPH') {
         custom = custom.filter(row => parseFloat(row.sph) !== 0);
@@ -76,11 +75,17 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       setLoading(false);
     }
     loadRows();
-  }, [material, vision, sign, powerType, compoundLimit, coatings]);
+  }, [material, vision, sign, powerType, coatings]);
 
   const lensRows = customRows;
 
+  const showAxis = powerType !== 'SPH' && !(powerType === 'Compound' && vision === 'single vision');
+
   useEffect(() => {
+    if (!showAxis) {
+      setRowAxes({});
+      return;
+    }
     const defaultAxis = getDefaultAxis(vision, sign, powerType);
     if (defaultAxis !== undefined) {
       const newAxes: Record<string, number> = {};
@@ -91,7 +96,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     } else {
       setRowAxes({});
     }
-  }, [vision, sign, powerType, lensRows]);
+  }, [vision, sign, powerType, lensRows, showAxis]);
 
   useEffect(() => {
     async function fetchShops() {
@@ -120,7 +125,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     setDeltas({});
     setEditedAlertQtys({});
     setEditedAlertStatuses({});
-  }, [selectedShop, material, vision, coatings, sign, powerType, compoundLimit, isDemo]);
+  }, [selectedShop, material, vision, coatings, sign, powerType, isDemo]);
 
   async function fetchStock() {
     setLoading(true);
@@ -141,11 +146,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       } else if (powerType === 'CYL') {
         query = query.gt('cyl', 0).lte('cyl', 6.0);
       } else {
-        if (compoundLimit === '2.0') {
-          query = query.gte('cyl', 0.25).lte('cyl', 2.0);
-        } else {
-          query = query.gte('cyl', 2.25).lte('cyl', 4.0);
-        }
+        query = query.gte('cyl', 0.25);
       }
 
       const { data, error } = await query;
@@ -352,10 +353,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const handleEditToggle = () => {
     if (isEditMode) {
-      fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings).then(custom => {
+      fetchCustomLensRows(material, vision, sign, powerType, coatings).then(custom => {
         let rows = custom;
         if (!rows) {
-          rows = generateLensRows(powerType, compoundLimit, vision, sign);
+          rows = generateLensRows(powerType, vision, sign);
         }
         if (sign === '+' && powerType === 'SPH') {
           rows = rows.filter(row => parseFloat(row.sph) !== 0);
@@ -371,14 +372,14 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const handleSaveList = async () => {
     setLoading(true);
     try {
-      let oldRows = await fetchCustomLensRows(material, vision, sign, powerType, compoundLimit, coatings);
+      let oldRows = await fetchCustomLensRows(material, vision, sign, powerType, coatings);
       if (!oldRows) {
-        oldRows = generateLensRows(powerType, compoundLimit, vision, sign);
+        oldRows = generateLensRows(powerType, vision, sign);
       }
       if (sign === '+' && powerType === 'SPH') {
         oldRows = oldRows.filter(row => parseFloat(row.sph) !== 0);
       }
-      const { success, error } = await saveCustomLensRows(material, vision, sign, powerType, compoundLimit, customRows, coatings);
+      const { success, error } = await saveCustomLensRows(material, vision, sign, powerType, customRows, coatings);
 
       if (!success) {
         alert('Failed to save list: ' + (error as any).message);
@@ -473,6 +474,77 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     setInsertAt(index);
     const row = customRows[index];
     setNewRowPower({ sph: row.sph, cyl: row.cyl, add: row.add || '' });
+  };
+
+  const gestureStateRef = React.useRef<{
+    timer: any;
+    startX: number;
+    startY: number;
+    targetIndex: number | null;
+    isActivated: boolean;
+  }>({
+    timer: null,
+    startX: 0,
+    startY: 0,
+    targetIndex: null,
+    isActivated: false
+  });
+
+  const clearLongPressTimer = useCallback(() => {
+    if (gestureStateRef.current.timer) {
+      clearTimeout(gestureStateRef.current.timer);
+      gestureStateRef.current.timer = null;
+    }
+    gestureStateRef.current.targetIndex = null;
+  }, []);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      clearLongPressTimer();
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      clearLongPressTimer();
+    };
+  }, [clearLongPressTimer]);
+
+  const handleRowPointerDown = (e: React.PointerEvent, index: number) => {
+    if (!isEditMode) return;
+    // Only respond to primary mouse button or touch
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+    clearLongPressTimer();
+    gestureStateRef.current.isActivated = false;
+    gestureStateRef.current.startX = e.clientX;
+    gestureStateRef.current.startY = e.clientY;
+    gestureStateRef.current.targetIndex = index;
+
+    gestureStateRef.current.timer = setTimeout(() => {
+      if (gestureStateRef.current.targetIndex === index) {
+        gestureStateRef.current.isActivated = true;
+        initiateInsert(index);
+      }
+      gestureStateRef.current.timer = null;
+    }, 550);
+  };
+
+  const handleRowPointerMove = (e: React.PointerEvent) => {
+    if (!gestureStateRef.current.timer) return;
+    const deltaX = Math.abs(e.clientX - gestureStateRef.current.startX);
+    const deltaY = Math.abs(e.clientY - gestureStateRef.current.startY);
+    // If movement exceeds 10px, cancel hold
+    if (deltaX > 10 || deltaY > 10) {
+      clearLongPressTimer();
+    }
+  };
+
+  const handleRowPointerUp = () => {
+    clearLongPressTimer();
+  };
+
+  const handleRowPointerCancel = () => {
+    clearLongPressTimer();
   };
 
   const confirmInsert = () => {
@@ -576,15 +648,6 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
               <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
             </div>
           </div>
-          {(powerType === 'Compound' || powerType === 'Cross Compound') && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">CYL Range</label>
-              <div className="flex gap-1.5 mt-1">
-                <button onClick={() => setCompoundLimit('2.0')} className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '2.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>upto 2.0 cyl</button>
-                <button onClick={() => setCompoundLimit('4.0')} className={`flex-1 py-1.5 px-1 rounded-md border text-[10px] font-medium transition-all ${compoundLimit === '4.0' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>upto 4 cyl</button>
-              </div>
-            </div>
-          )}
         </div>
 
         <div>
@@ -640,7 +703,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                 )}
                 {isEditMode && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Move</th>}
                 <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-48">Description</th>
-                {powerType !== 'SPH' && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Axis</th>}
+                {showAxis && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Axis</th>}
                 <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Stock</th>
                 {!isEditMode ? (
                   <>
@@ -672,7 +735,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                   <React.Fragment key={rowKey}>
                     {isInsertMode && (
                       <tr className="bg-yellow-50 dark:bg-yellow-900/20">
-                        <td colSpan={powerType !== 'SPH' ? 6 : 5} className="p-2">
+                        <td colSpan={showAxis ? 6 : 5} className="p-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <input type="number" step="0.25" placeholder="SPH" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.sph} onChange={(e) => setNewRowPower({ ...newRowPower, sph: e.target.value })} />
                             <input type="number" step="0.25" placeholder="CYL" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.cyl} onChange={(e) => setNewRowPower({ ...newRowPower, cyl: e.target.value })} />
@@ -687,13 +750,16 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                     )}
                       <tr
                       onContextMenu={(e) => { if (isEditMode) { e.preventDefault(); initiateInsert(index); } }}
-                      onMouseDown={(e) => { if (isEditMode) { const timer = setTimeout(() => initiateInsert(index), 700); (e.currentTarget as any)._holdTimer = timer; } }}
-                      onMouseUp={(e) => { if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer); }}
-                      onMouseLeave={(e) => { if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer); }}
-                      onTouchStart={(e) => { if (isEditMode) { const timer = setTimeout(() => initiateInsert(index), 700); (e.currentTarget as any)._holdTimer = timer; } }}
-                      onTouchEnd={(e) => { if ((e.currentTarget as any)._holdTimer) clearTimeout((e.currentTarget as any)._holdTimer); }}
+                      onPointerDown={(e) => handleRowPointerDown(e, index)}
+                      onPointerMove={handleRowPointerMove}
+                      onPointerUp={handleRowPointerUp}
+                      onPointerCancel={handleRowPointerCancel}
                       className={`hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50 ${isEditMode ? 'cursor-pointer select-none' : ''} ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20' : ''}`}
-                      onClick={() => isEditMode && toggleRowSelection(index)}
+                      onClick={() => {
+                        if (isEditMode && !gestureStateRef.current.isActivated) {
+                          toggleRowSelection(index);
+                        }
+                      }}
                     >
                       {isEditMode && (
                         <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
@@ -721,7 +787,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                         {isEditMode && <span className="mr-2 text-gray-400">☰</span>}
                         {name}
                       </td>
-                      {powerType !== 'SPH' && (
+                      {showAxis && (
                         <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
                           <select disabled={isEditMode} value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [rowKey]: parseInt(e.target.value) })} className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14 disabled:opacity-50">
                             <option value="">-</option>

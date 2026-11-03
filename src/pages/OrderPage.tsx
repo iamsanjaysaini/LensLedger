@@ -110,7 +110,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const lensRows = customRows;
 
-  const showAxis = powerType !== 'SPH' && !(powerType === 'Compound' && vision === 'single vision');
+  const showAxis = powerType !== 'SPH' && powerType !== 'Cross Compound' && !(powerType === 'Compound' && vision === 'single vision');
 
   useEffect(() => {
     if (!showAxis) {

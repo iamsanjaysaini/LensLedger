@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { ChevronRight, Bell, ChevronLeft, AlertTriangle, Calendar } from 'lucide-react';
-import { Shop, sortLensNames } from '../utils/lensUtils';
+import { showToast } from '../components/Toast';
+import { ChevronRight, Bell, ChevronLeft, AlertTriangle, Calendar, Plus, Minus, ShoppingCart, Loader2 } from 'lucide-react';
+import { Shop, sortLensNames, formatLensName } from '../utils/lensUtils';
 
 interface LowStockItem {
+  id: string;
   lens_name: string;
   shop_name: string;
   shop_id: string;
@@ -37,6 +39,8 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   const [alertView, setAlertView] = useState<AlertView>('main');
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [alertLoading, setAlertLoading] = useState(false);
+  const [orderQtys, setOrderQtys] = useState<Record<string, number>>({});
+  const [orderSaving, setOrderSaving] = useState(false);
 
 
   useEffect(() => {
@@ -115,6 +119,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     if (isDemo) {
       setLowStockItems([
         {
+          id: 'demo-1',
           lens_name: 'Plano HC',
           shop_name: 'Narbada Eye Care',
           shop_id: '1',
@@ -127,6 +132,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
           alert_qty: 1.50
         },
         {
+          id: 'demo-2',
           lens_name: '-0.50 SPH HC',
           shop_name: 'Narbada Eye Care',
           shop_id: '1',
@@ -171,21 +177,15 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
 
         const sph = parseFloat(item.sph).toFixed(2);
         const cyl = parseFloat(item.cyl).toFixed(2);
-        const sign = item.sign || '';
-        const coatingsStr = (item.coatings || []).join(' ');
-        const materialPart = item.material === 'CR' ? '' : item.material;
-        const visionPart = item.vision === 'single vision' ? '' : item.vision;
-        let powerPart = '';
-        if (item.power_type === 'SPH') powerPart = parseFloat(sph) === 0 ? 'Plano' : `${sign}${sph} SPH`;
-        else if (item.power_type === 'CYL') powerPart = `${sign}${cyl} CYL`;
-        else if (item.power_type === 'Compound') powerPart = `${sign}${sph}/${sign}${cyl}`;
-        else if (item.power_type === 'Cross Compound') powerPart = `${sign}${sph}/${sign === '+' ? '-' : '+'}${cyl}`;
-        const addPart = item.addition ? `ADD +${parseFloat(item.addition).toFixed(2)}` : '';
-        const axisPart = item.axis && item.power_type !== 'SPH' ? `AXIS ${item.axis}` : '';
-        const lensName = [powerPart, addPart, axisPart, coatingsStr, materialPart, visionPart]
-          .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+        // Orders page wale same naam-format se naam banao, taaki order list me naam match kare
+        const lensName = formatLensName(
+          item.material, item.vision, item.sign || null, item.power_type,
+          sph, cyl, item.coatings || [],
+          item.axis ? Number(item.axis) : undefined,
+          item.addition ? String(item.addition) : undefined
+        );
         items.push({
-          lens_name: lensName, shop_name: item.shops?.name || 'Unknown',
+          id: item.id, lens_name: lensName, shop_name: item.shops?.name || 'Unknown',
           shop_id: item.shop_id, quantity: Number(item.quantity),
           material: item.material, vision: item.vision, sign: item.sign,
           power_type: item.power_type, coatings: item.coatings || [],
@@ -202,6 +202,59 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   }, [fetchLowStockItems]);
 
   const totalAlerts = lowStockItems.length;
+
+  // Add to Order: qty badhao / ghatao (0.5 pair step, jaise Orders page me)
+  function changeOrderQty(id: string, delta: number) {
+    setOrderQtys(prev => {
+      const next = Math.max(0, (prev[id] || 0) + delta);
+      const copy = { ...prev };
+      if (next === 0) delete copy[id]; else copy[id] = next;
+      return copy;
+    });
+  }
+
+  function setOrderQtyValue(id: string, value: string) {
+    const n = parseFloat(value);
+    setOrderQtys(prev => {
+      const copy = { ...prev };
+      if (!isFinite(n) || n <= 0) delete copy[id]; else copy[id] = n;
+      return copy;
+    });
+  }
+
+  const orderItemsCount = Object.keys(orderQtys).length;
+
+  // Orders page jaisa hi: `orders` table me insert hota hai, to Orders page ki list me hi dikhega
+  async function addToOrder() {
+    const items = lowStockItems.filter(i => (orderQtys[i.id] || 0) > 0);
+    if (!items.length) { showToast('Pehle kisi lens ki qty add karo.', 'info'); return; }
+    if (isDemo) { showToast('Demo Mode: Orders are not saved.', 'info'); return; }
+
+    setOrderSaving(true);
+    const failed: string[] = [];
+    const doneIds: string[] = [];
+    for (const item of items) {
+      const { error } = await supabase.from('orders').insert({
+        shop_id: item.shop_id,
+        lens_details: { name: item.lens_name },
+        quantity: orderQtys[item.id],
+      });
+      if (error) failed.push(`${item.lens_name}: ${error.message}`);
+      else doneIds.push(item.id);
+    }
+    setOrderSaving(false);
+
+    if (doneIds.length) {
+      setOrderQtys(prev => {
+        const copy = { ...prev };
+        doneIds.forEach(id => delete copy[id]);
+        return copy;
+      });
+      showToast(`Order list me add ho gaye! (${doneIds.length} items)`, 'success');
+      if (shop) await fetchDateGroups(shop.id);
+    }
+    if (failed.length) alert('Ye add nahi hue:\n' + failed.join('\n'));
+  }
 
   function formatDateDisplay(dateStr: string) {
     const d = new Date(dateStr);
@@ -226,23 +279,65 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
               <p className="text-sm text-gray-500">No low stock items!</p>
             </div>
           ) : (
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-800/80">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Lens</th>
-                    <th className="px-3 py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider w-36">Quantity</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {lowStockItems.map((item, i) => (
-                    <tr key={i} className="hover:bg-orange-50/40 even:bg-gray-50 dark:even:bg-gray-700/30">
-                      <td className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300">{item.lens_name}</td>
-                      <td className="px-3 py-2 text-center text-xs font-bold text-orange-600">{formatQty(item.quantity)} / {formatQty(item.alert_qty)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-3">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 dark:bg-gray-800/80">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Lens</th>
+                        <th className="px-3 py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider w-24">Current QTY</th>
+                        <th className="px-3 py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider w-24">Alert QTY</th>
+                        <th className="px-3 py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider w-44">Add to Order</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {lowStockItems.map((item) => {
+                        const q = orderQtys[item.id] || 0;
+                        return (
+                          <tr key={item.id} className="hover:bg-orange-50/40 even:bg-gray-50 dark:even:bg-gray-700/30">
+                            <td className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300">{item.lens_name}</td>
+                            <td className="px-3 py-2 text-center text-xs font-bold text-orange-600">{formatQty(item.quantity)}</td>
+                            <td className="px-3 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400">{formatQty(item.alert_qty)}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button onClick={() => changeOrderQty(item.id, -0.5)} aria-label="Qty kam karo"
+                                  className="p-1.5 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 transition-colors">
+                                  <Minus className="w-4 h-4" />
+                                </button>
+                                <input
+                                  type="number" step="0.5" min="0"
+                                  value={q === 0 ? '' : q}
+                                  placeholder="0"
+                                  onChange={(e) => setOrderQtyValue(item.id, e.target.value)}
+                                  className="w-14 text-xs text-center font-bold bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded-md px-1 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-gray-800 dark:text-gray-100"
+                                />
+                                <button onClick={() => changeOrderQty(item.id, 0.5)} aria-label="Qty badhao"
+                                  className="p-1.5 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 transition-colors">
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                {orderItemsCount > 0 && (
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400">{orderItemsCount} lens select kiye</span>
+                )}
+                <button
+                  onClick={addToOrder}
+                  disabled={orderSaving || orderItemsCount === 0}
+                  className="flex items-center gap-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md transition-colors shadow-sm">
+                  {orderSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShoppingCart className="w-4 h-4" />}
+                  Add to Order
+                </button>
+              </div>
             </div>
           )}
       </div>

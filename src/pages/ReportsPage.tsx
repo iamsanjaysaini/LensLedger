@@ -1,7 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Shop, formatReportQty, sortLensNames } from '../utils/lensUtils';
-import { FileText, ChevronRight, ChevronLeft, ShoppingCart, Tag, Layers } from 'lucide-react';
+import { FileText, ChevronRight, ChevronLeft, ShoppingCart, Tag, Layers, Database, Download, Upload, Loader2 } from 'lucide-react';
+import { showToast } from '../components/Toast';
+import {
+  TABLES, LAST_BACKUP_KEY, MAX_BACKUP_FILE_BYTES, RestoreError, buildBackup, downloadBackup, parseBackup,
+  loadPreview, restoreBackup, requireSession, saveCoatings, errMsg, sumCounts, dateStamp, timeStamp,
+} from '../utils/backup';
+import type { BackupFile, RestorePreview } from '../utils/backup';
 
 type ReportView =
   | 'individual_shop'
@@ -58,6 +64,219 @@ function DateRangeForm({ onSearch, buttonText = "Show Report" }: { onSearch: (st
         </button>
       </div>
     </form>
+  );
+}
+
+type PendingRestore = { file: BackupFile; name: string } & RestorePreview;
+
+function BackupSection({ isDemo }: { isDemo: boolean }) {
+  const [busy, setBusy] = useState<'idle' | 'backup' | 'checking' | 'restore'>('idle');
+  const [status, setStatus] = useState('');
+  const [percent, setPercent] = useState<number | null>(null);
+  const [lastBackup, setLastBackup] = useState<string | null>(() => {
+    try { return localStorage.getItem(LAST_BACKUP_KEY); } catch { return null; }
+  });
+  const [pending, setPending] = useState<PendingRestore | null>(null);
+  const [confirmText, setConfirmText] = useState('');
+  const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (busy === 'idle') return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [busy]);
+
+  async function handleBackup() {
+    if (isDemo) { showToast('Demo mode mein Backup available nahi hai.', 'info'); return; }
+    if (busy !== 'idle') return;
+    setBusy('backup'); setMessage(null); setPercent(null);
+    try {
+      await requireSession();
+      const file = await buildBackup(setStatus);
+      downloadBackup(file, `LensLedger-backup-${dateStamp()}.json`);
+      const now = new Date().toISOString();
+      try { localStorage.setItem(LAST_BACKUP_KEY, now); } catch { /* ignore */ }
+      setLastBackup(now);
+      showToast(`Backup download ho gaya (${sumCounts(file.counts)} rows).`, 'success');
+    } catch (e) {
+      setMessage({ kind: 'error', text: `Backup fail hua, file download nahi hui. ${errMsg(e)}` });
+      showToast('Backup fail hua. Details neeche dikhayi hain.', 'error');
+    } finally {
+      setBusy('idle'); setStatus('');
+    }
+  }
+
+  function handleRestoreClick() {
+    if (isDemo) { showToast('Demo mode mein Restore available nahi hai.', 'info'); return; }
+    if (busy !== 'idle') return;
+    fileRef.current?.click();
+  }
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setMessage(null); setPending(null); setConfirmText('');
+    if (f.size > MAX_BACKUP_FILE_BYTES) {
+      setMessage({ kind: 'error', text: 'File bahut badi hai (100 MB se zyada). Ye backup file nahi lagti.' });
+      return;
+    }
+    setBusy('checking'); setStatus('File check ho rahi hai...');
+    try {
+      await requireSession();
+      const parsed = parseBackup(await f.text());
+      const preview = await loadPreview(parsed);
+      setPending({ file: parsed, name: f.name, ...preview });
+    } catch (err) {
+      setMessage({ kind: 'error', text: `File reject hui: ${errMsg(err)}` });
+      showToast('File reject hui.', 'error');
+    } finally {
+      setBusy('idle'); setStatus('');
+    }
+  }
+
+  async function handleConfirmRestore() {
+    if (!pending || confirmText !== 'RESTORE' || busy !== 'idle') return;
+    const p = pending;
+    setBusy('restore'); setMessage(null); setPercent(null);
+    try {
+      await requireSession();
+      setStatus('Pehle current data ka safety backup ban raha hai...');
+      const safety = await buildBackup(setStatus);
+      downloadBackup(safety, `LensLedger-pre-restore-${timeStamp()}.json`);
+      await restoreBackup(p.file, (pr) => { setStatus(pr.label); setPercent(pr.percent); });
+      const coatingsOk = saveCoatings(p.file.local.availableCoatings);
+      setPending(null); setConfirmText('');
+      setMessage({
+        kind: 'success',
+        text: `Restore poora hua (${sumCounts(p.file.counts)} rows). ` +
+          (coatingsOk ? 'Coatings list bhi wapas aa gayi.' : 'Par coatings list browser mein save nahi ho payi.') +
+          ' Safety backup file bhi download hui hai, use sambhal kar rakhein.',
+      });
+      showToast('Restore poora hua.', 'success');
+    } catch (err) {
+      setPending(null); setConfirmText('');
+      setMessage({
+        kind: 'error',
+        text: err instanceof RestoreError
+          ? err.report()
+          : `Restore shuru nahi hua: ${errMsg(err)} Database mein kuch nahi badla.`,
+      });
+      showToast('Restore fail hua. Details neeche dikhayi hain.', 'error');
+    } finally {
+      setBusy('idle'); setStatus(''); setPercent(null);
+    }
+  }
+
+  const working = busy !== 'idle';
+  const btn = 'flex items-center justify-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+
+  return (
+    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+          <Database className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+        </div>
+        <div>
+          <p className="font-bold text-sm text-gray-800 dark:text-white">Backup &amp; Restore</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">
+            Last backup: {lastBackup ? new Date(lastBackup).toLocaleString('en-GB') : 'abhi tak nahi liya'}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button onClick={handleBackup} disabled={working} className={`${btn} bg-indigo-600 hover:bg-indigo-700 text-white`}>
+          {busy === 'backup' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+          Download Backup (.json)
+        </button>
+        <button onClick={handleRestoreClick} disabled={working} className={`${btn} bg-white dark:bg-gray-700 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20`}>
+          {busy === 'checking' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+          Restore from Backup
+        </button>
+        <input ref={fileRef} type="file" accept=".json,application/json" onChange={handleFile} className="hidden" />
+      </div>
+
+      {working && (
+        <div className="space-y-1.5">
+          <p className="text-xs text-gray-600 dark:text-gray-300">{status}</p>
+          {percent !== null && (
+            <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div className="h-full bg-indigo-600 transition-all" style={{ width: `${percent}%` }} />
+            </div>
+          )}
+          {busy === 'restore' && <p className="text-[10px] text-red-500 font-semibold">Restore chal raha hai. Page band ya refresh mat karein, aur kisi aur page par kaam na karein.</p>}
+        </div>
+      )}
+
+      {pending && !working && (
+        <div className="space-y-3 border-t border-gray-200 dark:border-gray-700 pt-4">
+          <p className="text-xs text-gray-700 dark:text-gray-300">
+            File: <b>{pending.name}</b> &middot; Backup ki date: <b>{new Date(pending.file.exported_at).toLocaleString('en-GB')}</b>
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[10px] text-gray-500 uppercase tracking-wider">
+                  <th className="text-left py-1 pr-4">Table</th>
+                  <th className="text-center py-1 px-4">Backup file mein</th>
+                  <th className="text-center py-1 pl-4">Abhi database mein</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {TABLES.map((t) => (
+                  <tr key={t} className="text-gray-700 dark:text-gray-300">
+                    <td className="py-1 pr-4 font-medium">{t}</td>
+                    <td className="py-1 px-4 text-center font-bold text-indigo-600 dark:text-indigo-400">{pending.file.counts[t]}</td>
+                    <td className="py-1 pl-4 text-center">{pending.dbCounts[t]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="text-xs rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 p-3 space-y-1">
+            <p className="font-bold">Dhyan dein: abhi ka saara Stock, Orders, Sales, custom rows aur alert ignores delete ho jayenge, aur sirf is file ka data rahega.</p>
+            <p>Restore se pehle current data ki ek safety backup file apne aap download hogi.</p>
+            {pending.extraShops.length > 0 && (
+              <p>Ye shops file mein nahi hain, unka naam rahega par unka saara data khaali ho jayega: <b>{pending.extraShops.join(', ')}</b></p>
+            )}
+            {pending.lostCoatings.length > 0 && (
+              <p>Ye maujooda coatings file mein nahi hain, list badalne par hat jayengi: <b>{pending.lostCoatings.join(', ')}</b></p>
+            )}
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div className="flex-1">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Confirm karne ke liye RESTORE type karein</label>
+              <input
+                type="text"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                autoComplete="off"
+                className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-red-500"
+              />
+            </div>
+            <button onClick={handleConfirmRestore} disabled={confirmText !== 'RESTORE'} className={`${btn} bg-red-600 hover:bg-red-700 text-white`}>
+              Restore (purana data delete hoga)
+            </button>
+            <button onClick={() => { setPending(null); setConfirmText(''); }} className={`${btn} bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600`}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {message && (
+        <div className={`text-xs rounded-lg p-3 whitespace-pre-line border ${
+          message.kind === 'error'
+            ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+            : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+        }`}>
+          {message.text}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -413,6 +632,8 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
             onClick={() => { fetchOrderDates(selectedShop.id); setView('individual_orderedlensqty'); }} />
         </div>
       )}
+
+      {view === 'individual_shop' && <BackupSection isDemo={isDemo} />}
 
       {/* INDIVIDUAL ORDERS: Dates */}
       {view === 'individual_orders' && (

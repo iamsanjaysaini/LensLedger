@@ -30,6 +30,7 @@ interface OrderRecord {
   quantity: number;
   created_at: string;
   shop_id: string;
+  stock_updated?: boolean;
 }
 
 interface DateSummary {
@@ -239,7 +240,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
     const { data } = await supabase
       .from('orders')
-      .select('id, lens_details, quantity, created_at, shop_id')
+      .select('id, lens_details, quantity, created_at, shop_id, stock_updated')
       .gte('created_at', `${dateStr}T00:00:00`)
       .lte('created_at', `${dateStr}T23:59:59`)
       .order('created_at', { ascending: false });
@@ -270,10 +271,11 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   };
 
   const toggleSentSelectAll = () => {
-    if (sentSelectedIds.size === sentOrderRecords.length) {
+    const selectable = sentOrderRecords.filter(r => !r.stock_updated);
+    if (selectable.length > 0 && sentSelectedIds.size === selectable.length) {
       setSentSelectedIds(new Set());
     } else {
-      setSentSelectedIds(new Set(sentOrderRecords.map(r => r.id)));
+      setSentSelectedIds(new Set(selectable.map(r => r.id)));
     }
   };
 
@@ -291,7 +293,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       return;
     }
 
-    const selectedRecords = sentOrderRecords.filter(r => sentSelectedIds.has(r.id));
+    // Jo order pehle hi stock me add ho chuke hain unhe dobara add nahi karna
+    const selectedRecords = sentOrderRecords.filter(r => sentSelectedIds.has(r.id) && !r.stock_updated);
+    if (selectedRecords.length === 0) {
+      showToast('Ye order(s) pehle hi stock me add ho chuke hain.', 'info');
+      return;
+    }
     const stockRecords = selectedRecords.filter(r => stockLensStatus[r.id]);
     const nonStockRecords = selectedRecords.filter(r => !stockLensStatus[r.id]);
 
@@ -307,7 +314,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
     setUpdateStockLoading(true);
     let updatedCount = 0;
-    let lastError = null;
+    let alreadyCount = 0;
+    let lastError: any = null;
+    const updatedIds = new Set<string>();
 
     for (const record of stockRecords) {
       const qtyToAdd = sentOrderQuantities[record.id] || record.quantity;
@@ -316,7 +325,30 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       const parsed = parseLensName(record.lens_details?.name || '');
       if (!parsed) continue;
 
-      const { data: existing } = await supabase
+      // Step 1: order ko "stock me add" mark karo (sirf tab jab pehle se mark na ho).
+      // Isse double click ya dusre device se dobara add nahi hoga.
+      const { data: claimed, error: claimError } = await supabase
+        .from('orders')
+        .update({ stock_updated: true })
+        .eq('id', record.id)
+        .eq('stock_updated', false)
+        .select('id');
+
+      if (claimError) {
+        console.error('Order mark error:', claimError);
+        lastError = claimError;
+        continue;
+      }
+      if (!claimed || claimed.length === 0) {
+        alreadyCount++;
+        continue;
+      }
+
+      // Step 2: sahi stock row dhundho (axis aur addition ke saath)
+      const axisVal = parsed.axis ?? null;
+      const addVal = parsed.add ? parseFloat(parsed.add) : null;
+
+      let lookup: any = supabase
         .from('lens_stock')
         .select('id, quantity')
         .eq('shop_id', record.shop_id)
@@ -326,48 +358,69 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         .eq('power_type', parsed.powerType)
         .eq('sph', parseFloat(parsed.sph))
         .eq('cyl', parseFloat(parsed.cyl))
-        .filter('coatings', 'eq', `{${parsed.coatings.join(',')}}`)
-        .maybeSingle();
+        .filter('coatings', 'eq', `{${parsed.coatings.join(',')}}`);
+      lookup = axisVal !== null ? lookup.eq('axis', axisVal) : lookup.is('axis', null);
+      lookup = addVal !== null ? lookup.eq('addition', addVal) : lookup.is('addition', null);
 
-      const currentQty = existing ? Number(existing.quantity) : 0;
-      const newQty = currentQty + qtyToAdd;
+      const { data: existingRows, error: lookupError } = await lookup.limit(1);
+      let error: any = lookupError;
 
-      const updateData = {
-        shop_id: record.shop_id,
-        material: parsed.material,
-        vision: parsed.vision,
-        sign: parsed.sign,
-        power_type: parsed.powerType,
-        sph: parseFloat(parsed.sph),
-        cyl: parseFloat(parsed.cyl),
-        axis: parsed.axis || null,
-        addition: parsed.add ? parseFloat(parsed.add) : null,
-        coatings: parsed.coatings,
-        quantity: newQty
-      };
+      if (!error) {
+        const existing = existingRows && existingRows.length ? existingRows[0] : null;
+        const currentQty = existing ? Number(existing.quantity) : 0;
+        const newQty = currentQty + qtyToAdd;
 
-      const { error } = await supabase.from('lens_stock').upsert(updateData, {
-        onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings'
-      });
+        const updateData = {
+          shop_id: record.shop_id,
+          material: parsed.material,
+          vision: parsed.vision,
+          sign: parsed.sign,
+          power_type: parsed.powerType,
+          sph: parseFloat(parsed.sph),
+          cyl: parseFloat(parsed.cyl),
+          axis: axisVal,
+          addition: addVal,
+          coatings: parsed.coatings,
+          quantity: newQty
+        };
+
+        const res = await supabase.from('lens_stock').upsert(updateData, {
+          onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings'
+        });
+        error = res.error;
+      }
 
       if (error) {
         console.error('Update in stock error:', error);
         lastError = error;
+        // Stock add nahi hua to mark wapas hata do, taaki dobara try kar sako
+        await supabase.from('orders').update({ stock_updated: false }).eq('id', record.id);
       } else {
         updatedCount++;
+        updatedIds.add(record.id);
       }
     }
 
     setUpdateStockLoading(false);
+
+    if (updatedIds.size > 0) {
+      setSentOrderRecords(prev => prev.map(r => updatedIds.has(r.id) ? { ...r, stock_updated: true } : r));
+      setSentSelectedIds(new Set());
+    }
 
     if (updatedCount > 0) {
       let msg = `Successfully updated ${updatedCount} lens(es) in stock!`;
       if (nonStockRecords.length > 0) {
         msg += ` (${nonStockRecords.length} non-stock custom lens(es) skipped)`;
       }
+      if (alreadyCount > 0) {
+        msg += ` (${alreadyCount} pehle se add the, skip kiye)`;
+      }
       showToast(msg, 'success');
     } else if (lastError) {
       alert('Stock update failed: ' + (lastError as any).message);
+    } else if (alreadyCount > 0) {
+      showToast('Ye order(s) pehle hi stock me add ho chuke hain.', 'info');
     }
   };
 
@@ -799,7 +852,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                     <input
                       type="checkbox"
                       className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
-                      checked={sentOrderRecords.length > 0 && sentSelectedIds.size === sentOrderRecords.length}
+                      checked={sentOrderRecords.some(r => !r.stock_updated) && sentSelectedIds.size === sentOrderRecords.filter(r => !r.stock_updated).length}
                       onChange={toggleSentSelectAll}
                     />
                     <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
@@ -840,14 +893,16 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                           const isSelected = sentSelectedIds.has(record.id);
                           const isStock = stockLensStatus[record.id];
                           const qty = sentOrderQuantities[record.id] !== undefined ? sentOrderQuantities[record.id] : record.quantity;
+                          const alreadyAdded = !!record.stock_updated;
 
                           return (
-                            <tr key={record.id} className={`transition-colors ${isSelected ? 'bg-purple-50/60 dark:bg-purple-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 even:bg-gray-50/50 dark:even:bg-gray-800/20'}`}>
+                            <tr key={record.id} className={`transition-colors ${alreadyAdded ? 'opacity-60' : ''} ${isSelected ? 'bg-purple-50/60 dark:bg-purple-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 even:bg-gray-50/50 dark:even:bg-gray-800/20'}`}>
                               <td className="px-3 py-2 text-center">
                                 <input
                                   type="checkbox"
                                   className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
                                   checked={isSelected}
+                                  disabled={alreadyAdded}
                                   onChange={() => toggleSentSelect(record.id)}
                                 />
                               </td>
@@ -863,12 +918,17 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                                   step="0.5"
                                   min="0.5"
                                   value={qty}
+                                  disabled={alreadyAdded}
                                   onChange={(e) => handleSentQtyChange(record.id, e.target.value)}
                                   className="w-20 text-xs font-bold text-center bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                 />
                               </td>
                               <td className="px-3 py-2 text-center">
-                                {isStock ? (
+                                {alreadyAdded ? (
+                                  <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800" title="Ye order stock me add ho chuka hai">
+                                    Stock me add ho gaya
+                                  </span>
+                                ) : isStock ? (
                                   <span className="text-[10px] font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-0.5 rounded-full border border-green-200 dark:border-green-800">
                                     Stock Lens
                                   </span>

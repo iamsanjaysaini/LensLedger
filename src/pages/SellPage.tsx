@@ -38,6 +38,68 @@ interface SaleRecord {
   coatings?: string[];
 }
 
+// Stock row dhundhne ke liye key. sign / axis / addition NULL ho sakte hain.
+interface StockLookup {
+  shop_id: string;
+  material: string;
+  vision: string;
+  sign: string | null;
+  power_type: string;
+  sph: number;
+  cyl: number;
+  axis: number | null;
+  addition: number | null;
+  coatings: string[];
+}
+
+// NULL columns ke liye .is(col, null) use hota hai (.eq(col, null) sahi match nahi karta).
+async function findStockRow(k: StockLookup): Promise<{ id: string; quantity: number } | null> {
+  let q: any = supabase
+    .from('lens_stock')
+    .select('id, quantity')
+    .eq('shop_id', k.shop_id)
+    .eq('material', k.material)
+    .eq('vision', k.vision)
+    .eq('power_type', k.power_type)
+    .eq('sph', k.sph)
+    .eq('cyl', k.cyl)
+    .eq('coatings', `{${k.coatings.join(',')}}`);
+  q = k.sign ? q.eq('sign', k.sign) : q.is('sign', null);
+  q = k.axis != null ? q.eq('axis', k.axis) : q.is('axis', null);
+  q = k.addition != null ? q.eq('addition', k.addition) : q.is('addition', null);
+  const { data, error } = await q.limit(1);
+  if (error) throw error;
+  if (!data || !data.length) return null;
+  return { id: data[0].id, quantity: Number(data[0].quantity) };
+}
+
+// Stock tabhi badlega jab beech me kisi ne quantity change na ki ho (expectedOld match kare).
+async function setStockQuantity(id: string, expectedOld: number, newQty: number): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('lens_stock')
+    .update({ quantity: newQty })
+    .eq('id', id)
+    .eq('quantity', expectedOld)
+    .select('id');
+  if (error) throw error;
+  return !!data && data.length > 0;
+}
+
+function lookupFromRecord(r: SaleRecord): StockLookup {
+  return {
+    shop_id: r.shop_id,
+    material: r.material || '',
+    vision: r.vision || '',
+    sign: r.sign || null,
+    power_type: r.power_type || '',
+    sph: Number(r.sph),
+    cyl: Number(r.cyl),
+    axis: r.axis ?? null,
+    addition: r.addition ?? null,
+    coatings: r.coatings || [],
+  };
+}
+
 export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShop, setSelectedShop] = useState('');
@@ -209,45 +271,34 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     setDeleteLoading(true);
 
     const toDelete = saleRecords.filter(r => selectedIds.has(r.id));
+    const failed: string[] = [];
 
     for (const record of toDelete) {
-      // Stock restore karo agar sale record me details hain
-      if (record.material && record.sph != null && record.cyl != null) {
-        const { data: existing } = await supabase
-          .from('lens_stock')
-          .select('quantity')
-          .eq('shop_id', record.shop_id)
-          .eq('material', record.material)
-          .eq('vision', record.vision || '')
-          .eq('sign', record.sign || '')
-          .eq('power_type', record.power_type || '')
-          .eq('sph', record.sph)
-          .eq('cyl', record.cyl)
-          .eq('axis', record.axis ?? null)
-          .eq('addition', record.addition ?? null)
-          .eq('coatings', `{${(record.coatings || []).join(',')}}`)
-          .maybeSingle();
-
-        if (existing) {
-          await supabase.from('lens_stock').update({
-            quantity: (existing.quantity || 0) + record.quantity
-          }).eq('shop_id', record.shop_id)
-            .eq('material', record.material)
-            .eq('vision', record.vision || '')
-            .eq('sign', record.sign || '')
-            .eq('power_type', record.power_type || '')
-            .eq('sph', record.sph)
-            .eq('cyl', record.cyl)
-            .eq('axis', record.axis ?? null)
-            .eq('addition', record.addition ?? null)
-            .eq('coatings', `{${(record.coatings || []).join(',')}}`);
+      let restored: { id: string; from: number; to: number } | null = null;
+      try {
+        // Stock restore karo agar sale record me details hain
+        if (record.material && record.sph != null && record.cyl != null) {
+          const row = await findStockRow(lookupFromRecord(record));
+          if (row) {
+            const to = row.quantity + Number(record.quantity);
+            const ok = await setStockQuantity(row.id, row.quantity, to);
+            if (!ok) throw new Error('Stock beech me badal gaya, dobara try karo.');
+            restored = { id: row.id, from: row.quantity, to };
+          }
         }
+        const { error } = await supabase.from('sales').delete().eq('id', record.id);
+        if (error) throw error;
+      } catch (e: any) {
+        // Sale delete na hui to restore kiya hua stock wapas pehle jaisa kar do
+        if (restored) {
+          try { await setStockQuantity(restored.id, restored.to, restored.from); } catch (_) { /* ignore */ }
+        }
+        failed.push(`${record.lens_details?.name || record.id}: ${e?.message || e}`);
       }
     }
 
-    const { error } = await supabase.from('sales').delete().in('id', Array.from(selectedIds));
     setDeleteLoading(false);
-    if (error) { alert('Delete failed: ' + error.message); return; }
+    if (failed.length) alert('Ye sales delete nahi hui:\n' + failed.join('\n'));
     setSelectedIds(new Set());
     await fetchTodaySales();
     await fetchStock();
@@ -258,46 +309,42 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     const newQty = parseFloat(editingQty);
     if (isNaN(newQty) || newQty <= 0) { alert('Valid quantity enter karo.'); return; }
 
-    const oldQty = record.quantity;
+    const oldQty = Number(record.quantity);
     const diff = newQty - oldQty; // positive = zyada sell, negative = kam sell
+    let adjusted: { id: string; from: number; to: number } | null = null;
 
-    // Stock update karo agar details available hain
-    if (record.material && record.sph != null && record.cyl != null && diff !== 0) {
-      const { data: existing } = await supabase
-        .from('lens_stock')
-        .select('quantity')
-        .eq('shop_id', record.shop_id)
-        .eq('material', record.material)
-        .eq('vision', record.vision || '')
-        .eq('sign', record.sign || '')
-        .eq('power_type', record.power_type || '')
-        .eq('sph', record.sph)
-        .eq('cyl', record.cyl)
-        .eq('axis', record.axis ?? null)
-        .eq('addition', record.addition ?? null)
-        .eq('coatings', `{${(record.coatings || []).join(',')}}`)
-        .maybeSingle();
-
-      if (existing) {
-        const newStock = Math.max(0, (existing.quantity || 0) - diff);
-        await supabase.from('lens_stock').update({ quantity: newStock })
-          .eq('shop_id', record.shop_id)
-          .eq('material', record.material)
-          .eq('vision', record.vision || '')
-          .eq('sign', record.sign || '')
-          .eq('power_type', record.power_type || '')
-          .eq('sph', record.sph)
-          .eq('cyl', record.cyl)
-          .eq('axis', record.axis ?? null)
-          .eq('addition', record.addition ?? null)
-          .eq('coatings', `{${(record.coatings || []).join(',')}}`);
+    try {
+      // Stock update karo agar details available hain
+      if (record.material && record.sph != null && record.cyl != null && diff !== 0) {
+        const row = await findStockRow(lookupFromRecord(record));
+        if (row) {
+          if (diff > 0 && diff > row.quantity) {
+            alert(`Stock kam hai: abhi sirf ${row.quantity} pair bacha hai, aap ${diff} pair aur badhana chahte ho.`);
+            return;
+          }
+          const to = row.quantity - diff;
+          const ok = await setStockQuantity(row.id, row.quantity, to);
+          if (!ok) { alert('Stock beech me badal gaya, dobara try karo.'); return; }
+          adjusted = { id: row.id, from: row.quantity, to };
+        } else if (diff > 0) {
+          alert('Is lens ka stock nahi mila, isliye quantity badhai nahi ja sakti.');
+          return;
+        }
       }
+
+      const { error } = await supabase.from('sales')
+        .update({ lens_details: { name: editingName }, quantity: newQty })
+        .eq('id', record.id);
+      if (error) throw error;
+    } catch (e: any) {
+      // Sale update fail hui to stock wapas pehle jaisa kar do
+      if (adjusted) {
+        try { await setStockQuantity(adjusted.id, adjusted.to, adjusted.from); } catch (_) { /* ignore */ }
+      }
+      alert('Update failed: ' + (e?.message || e));
+      return;
     }
 
-    const { error } = await supabase.from('sales')
-      .update({ lens_details: { name: editingName }, quantity: newQty })
-      .eq('id', record.id);
-    if (error) { alert('Update failed: ' + error.message); return; }
     setEditingId(null);
     await fetchTodaySales();
     await fetchStock();
@@ -307,6 +354,14 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     const key = `${parseFloat(sph).toFixed(2)}:${parseFloat(cyl).toFixed(2)}:${axis || ''}:${add || ''}`;
     const current = deltas[key] || { qty: 0, name };
     const newQty = Math.max(0, current.qty + delta);
+
+    // Stock page par jitna stock dikh raha hai, usse zyada sell nahi kar sakte
+    const available = originalStock[key] || 0;
+    if (delta > 0 && newQty > available) {
+      showToast(available > 0 ? `Stock sirf ${available} pair hai.` : 'Stock 0 hai, sell nahi kar sakte.', 'error');
+      return;
+    }
+
     if (newQty === 0) { const d = { ...deltas }; delete d[key]; setDeltas(d); }
     else setDeltas({ ...deltas, [key]: { qty: newQty, name } });
   };
@@ -316,48 +371,93 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     const entries = Object.entries(deltas);
     if (!entries.length) { showToast('Please add items to sell.', 'info'); return; }
     setLoading(true);
-    let ok = 0, lastErr = null;
 
-    for (const [key, data] of entries) {
-      const [sphStr, cylStr, axisStr, addStr] = key.split(':');
-      const currentStock = originalStock[key] || 0;
+    try {
+      // Step 1: har item ka latest stock database se lo
+      const prepared: {
+        key: string;
+        data: { qty: number; name: string };
+        sphStr: string; cylStr: string; axisStr: string; addStr: string;
+        row: { id: string; quantity: number } | null;
+      }[] = [];
 
-      const { error: stockError } = await supabase.from('lens_stock').upsert({
-        shop_id: selectedShop, material, vision, sign, power_type: powerType,
-        sph: parseFloat(sphStr), cyl: parseFloat(cylStr),
-        axis: axisStr ? parseInt(axisStr) : null,
-        addition: addStr ? parseFloat(addStr) : null,
-        coatings, quantity: Math.max(0, currentStock - data.qty)
-      }, { onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings' });
+      for (const [key, data] of entries) {
+        const [sphStr, cylStr, axisStr, addStr] = key.split(':');
+        const row = await findStockRow({
+          shop_id: selectedShop, material, vision, sign, power_type: powerType,
+          sph: parseFloat(sphStr), cyl: parseFloat(cylStr),
+          axis: axisStr ? parseInt(axisStr) : null,
+          addition: addStr ? parseFloat(addStr) : null,
+          coatings,
+        });
+        prepared.push({ key, data, sphStr, cylStr, axisStr, addStr, row });
+      }
 
-      if (stockError) { lastErr = stockError; continue; }
+      // Step 2: kisi bhi item me stock kam ho to kuch bhi save nahi hoga
+      const short = prepared.filter(p => (p.row?.quantity ?? 0) < p.data.qty);
+      if (short.length) {
+        const lines = short.map(p => `• ${p.data.name}: stock ${p.row?.quantity ?? 0}, sell ${p.data.qty}`);
+        alert('Stock kam hai, sale save nahi hui:\n' + lines.join('\n'));
+        return;
+      }
 
-      // Sale record me full details save karo (edit/delete ke liye)
-      const { error: saleError } = await supabase.from('sales').insert({
-        shop_id: selectedShop,
-        lens_details: { name: data.name },
-        quantity: data.qty,
-        material, vision, sign,
-        power_type: powerType,
-        sph: parseFloat(sphStr),
-        cyl: parseFloat(cylStr),
-        axis: axisStr ? parseInt(axisStr) : null,
-        addition: addStr ? parseFloat(addStr) : null,
-        coatings
-      });
+      // Step 3: stock kam karo, phir sale record save karo
+      let ok = 0;
+      let lastErr: any = null;
+      const failedKeys: string[] = [];
 
-      if (saleError) lastErr = saleError;
-      else ok++;
-    }
+      for (const p of prepared) {
+        const row = p.row!;
+        const newStock = row.quantity - p.data.qty;
 
-    setLoading(false);
-    if (ok > 0) {
-      showToast(`Sales recorded! (${ok} items)`, 'success');
+        const updated = await setStockQuantity(row.id, row.quantity, newStock);
+        if (!updated) {
+          lastErr = { message: `${p.data.name}: stock beech me badal gaya, dobara try karo.` };
+          failedKeys.push(p.key);
+          continue;
+        }
+
+        // Sale record me full details save karo (edit/delete ke liye)
+        const { error: saleError } = await supabase.from('sales').insert({
+          shop_id: selectedShop,
+          lens_details: { name: p.data.name },
+          quantity: p.data.qty,
+          material, vision, sign,
+          power_type: powerType,
+          sph: parseFloat(p.sphStr),
+          cyl: parseFloat(p.cylStr),
+          axis: p.axisStr ? parseInt(p.axisStr) : null,
+          addition: p.addStr ? parseFloat(p.addStr) : null,
+          coatings
+        });
+
+        if (saleError) {
+          lastErr = saleError;
+          failedKeys.push(p.key);
+          // Sale save nahi hui to stock wapas pehle jaisa kar do
+          try { await setStockQuantity(row.id, newStock, row.quantity); } catch (_) { /* ignore */ }
+        } else ok++;
+      }
+
+      if (ok > 0) {
+        showToast(`Sales recorded! (${ok} items)`, 'success');
+      }
+      if (lastErr) alert('Failed: ' + (lastErr as any).message);
+
       setOriginalStock({});  // Clear before refetch so UI refreshes properly
-      setDeltas({});
+      if (failedKeys.length) {
+        const remaining: Record<string, { qty: number; name: string }> = {};
+        failedKeys.forEach(k => { remaining[k] = deltas[k]; });
+        setDeltas(remaining);
+      } else {
+        setDeltas({});
+      }
       await fetchStock();
+    } catch (e: any) {
+      alert('Failed: ' + (e?.message || e));
+    } finally {
+      setLoading(false);
     }
-    else if (lastErr) alert('Failed: ' + (lastErr as any).message);
   };
 
   const toggleCoating = (c: string) => {

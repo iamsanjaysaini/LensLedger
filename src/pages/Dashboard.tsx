@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { showToast } from '../components/Toast';
-import { ChevronRight, Bell, ChevronLeft, AlertTriangle, Calendar, PackagePlus, Check, Loader2 } from 'lucide-react';
+import { ChevronRight, Bell, ChevronLeft, AlertTriangle, Calendar } from 'lucide-react';
 import { Shop, sortLensNames } from '../utils/lensUtils';
 
 interface LowStockItem {
@@ -26,51 +25,6 @@ function formatQty(qty: number): string {
   return qty % 1 === 0 ? qty.toString() : qty.toFixed(2);
 }
 
-async function addQtyToStockByName(shopId: string, lensName: string, qty: number): Promise<{ ok: boolean; msg: string }> {
-  const { data, error } = await supabase
-    .from('lens_stock')
-    .select('id, quantity')
-    .eq('shop_id', shopId);
-
-  if (error) return { ok: false, msg: error.message };
-  if (!data?.length) return { ok: false, msg: 'Is shop ki lens_stock mein koi entry nahi.' };
-
-  function buildName(item: any): string {
-    const coating = Array.isArray(item.coatings) ? item.coatings.join(' ') : '';
-    const sign = item.sign || '';
-    let power = '';
-    if (item.power_type === 'SPH') power = Number(item.sph) === 0 ? 'Plano' : `${sign}${parseFloat(item.sph).toFixed(2)} SPH`;
-    else if (item.power_type === 'CYL') power = `${sign}${parseFloat(item.cyl).toFixed(2)} CYL`;
-    else if (item.power_type === 'Compound') power = `${sign}${parseFloat(item.sph).toFixed(2)}/${sign}${parseFloat(item.cyl).toFixed(2)}`;
-    else if (item.power_type === 'Cross Compound') {
-      const opp = sign === '+' ? '-' : '+';
-      power = `${sign}${parseFloat(item.sph).toFixed(2)}/${opp}${parseFloat(item.cyl).toFixed(2)}`;
-    }
-    const mat = item.material === 'CR' ? '' : item.material;
-    const vis = item.vision === 'single vision' ? '' : item.vision;
-    const add = item.addition ? `ADD +${parseFloat(item.addition).toFixed(2)}` : '';
-    const axis = item.axis ? `AXIS ${item.axis}` : '';
-    return [power, add, axis, coating, mat, vis].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-  }
-
-  const { data: fullRows } = await supabase
-    .from('lens_stock')
-    .select('*')
-    .eq('shop_id', shopId);
-
-  const matched = (fullRows || []).find(row => buildName(row) === lensName);
-  if (!matched) return { ok: false, msg: `Lens "${lensName}" stock mein nahi mila.` };
-
-  const newQty = Number(matched.quantity) + qty;
-  const { error: updateError } = await supabase
-    .from('lens_stock')
-    .update({ quantity: newQty })
-    .eq('id', matched.id);
-
-  if (updateError) return { ok: false, msg: updateError.message };
-  return { ok: true, msg: '' };
-}
-
 export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   const [shop, setShop] = useState<Shop | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,9 +38,6 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [alertLoading, setAlertLoading] = useState(false);
 
-  const [editStockMode, setEditStockMode] = useState<string | null>(null);
-  const [editedQtys, setEditedQtys] = useState<Record<string, number>>({});
-  const [stockUpdateLoading, setStockUpdateLoading] = useState(false);
 
   useEffect(() => {
     async function fetchShops() {
@@ -252,42 +203,6 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
 
   const totalAlerts = lowStockItems.length;
 
-  function enterEditMode(modeKey: string, orders: { name: string; qty: number }[]) {
-    setEditStockMode(modeKey);
-    const qtys: Record<string, number> = {};
-    orders.forEach(o => { qtys[o.name] = o.qty; });
-    setEditedQtys(qtys);
-  }
-
-  function cancelEditMode() {
-    setEditStockMode(null);
-    setEditedQtys({});
-  }
-
-  async function updateToStock(orders: { name: string; qty: number }[], shopId: string) {
-    if (!shopId) { showToast('Shop error.', 'info'); return; }
-    if (isDemo) { showToast('Demo Mode: Stock update not available.', 'info'); return; }
-    setStockUpdateLoading(true);
-    let ok = 0, fail = 0, failNames: string[] = [];
-
-    for (const order of orders) {
-      const qty = editedQtys[order.name] ?? order.qty;
-      if (qty <= 0) continue;
-      const result = await addQtyToStockByName(shopId, order.name, qty);
-      if (result.ok) ok++;
-      else { fail++; failNames.push(order.name); console.warn(result.msg); }
-    }
-
-    setStockUpdateLoading(false);
-    if (fail === 0) {
-      showToast(`Stock updated! ${ok} lens${ok !== 1 ? 'es' : ''} ke liye quantity add ho gayi.`, 'success');
-      setEditStockMode(null);
-      setEditedQtys({});
-    } else {
-      alert(`${ok} updated, ${fail} failed:\n${failNames.slice(0, 5).join('\n')}${failNames.length > 5 ? '\n...' : ''}`);
-    }
-  }
-
   function formatDateDisplay(dateStr: string) {
     const d = new Date(dateStr);
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', weekday: 'short' });
@@ -378,14 +293,12 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
           ) : (
             <ul className="divide-y divide-gray-100 dark:divide-gray-700">
               {dateGroups.map((group) => {
-                const modeKey = `shop-${shop.id}-${group.date}`;
-                const isEditMode = editStockMode === modeKey;
                 return (
                   <li key={group.date}>
                     <button
                       onClick={() => {
-                        if (selectedDate === group.date) { setSelectedDate(null); cancelEditMode(); }
-                        else { cancelEditMode(); fetchOrdersForDate(shop.id, group.date); }
+                        if (selectedDate === group.date) { setSelectedDate(null); }
+                        else { fetchOrdersForDate(shop.id, group.date); }
                       }}
                       className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors ${
                         selectedDate === group.date ? 'bg-indigo-50 dark:bg-indigo-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
@@ -412,43 +325,11 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                           <div className="py-6 text-center text-xs text-gray-400">Koi order nahi mila.</div>
                         ) : (
                           <>
-                            {/* Edit & Add to Stock toolbar */}
-                            <div className="px-4 py-2.5 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-100 dark:border-indigo-800/30 flex items-center gap-2">
-                              {!isEditMode ? (
-                                <button
-                                  onClick={() => enterEditMode(modeKey, dateOrders)}
-                                  className="flex items-center gap-1.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md transition-colors shadow-sm">
-                                  <PackagePlus className="w-3.5 h-3.5" /> Edit &amp; Add to Stock
-                                </button>
-                              ) : (
-                                <div className="flex items-center gap-2 w-full">
-                                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                                    {shop.name}
-                                  </span>
-                                  <div className="ml-auto flex gap-2">
-                                    <button
-                                      onClick={() => updateToStock(dateOrders, shop.id)}
-                                      disabled={stockUpdateLoading}
-                                      className="flex items-center gap-1.5 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-md transition-colors shadow-sm">
-                                      {stockUpdateLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                                      Update to Stock
-                                    </button>
-                                    <button onClick={cancelEditMode}
-                                      className="text-[11px] font-medium bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded-md transition-colors">
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
                             <table className="w-full">
                               <thead className="bg-indigo-50 dark:bg-indigo-900/20">
                                 <tr>
                                   <th className="px-4 py-2 text-left text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Lens Name</th>
-                                  <th className="px-4 py-2 text-right text-[10px] font-bold text-indigo-500 uppercase tracking-wider w-28">
-                                    {isEditMode ? 'Edit Qty' : 'Qty (Pair)'}
-                                  </th>
+                                  <th className="px-4 py-2 text-right text-[10px] font-bold text-indigo-500 uppercase tracking-wider w-28">Qty (Pair)</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-indigo-100 dark:divide-indigo-800/20">
@@ -456,20 +337,9 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                                   <tr key={i} className="even:bg-indigo-50/50 dark:even:bg-indigo-900/10">
                                     <td className="px-4 py-2 text-xs text-gray-700 dark:text-gray-300 font-medium">{order.name}</td>
                                     <td className="px-4 py-2 text-right">
-                                      {isEditMode ? (
-                                        <input
-                                          type="number"
-                                          step="0.5"
-                                          min="0"
-                                          value={editedQtys[order.name] ?? order.qty}
-                                          onChange={(e) => setEditedQtys(prev => ({ ...prev, [order.name]: parseFloat(e.target.value) || 0 }))}
-                                          className="w-20 text-xs text-right bg-white dark:bg-gray-900 border border-emerald-400 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-emerald-700 dark:text-emerald-400"
-                                        />
-                                      ) : (
-                                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                                          {formatQty(order.qty)}
-                                        </span>
-                                      )}
+                                      <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                                        {formatQty(order.qty)}
+                                      </span>
                                     </td>
                                   </tr>
                                 ))}

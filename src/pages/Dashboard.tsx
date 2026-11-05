@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/Toast';
+import UniversalSearch from '../components/UniversalSearch';
 import { ChevronRight, Bell, ChevronLeft, AlertTriangle, Calendar, Plus, Minus, ShoppingCart, Loader2 } from 'lucide-react';
 import { Shop, sortLensNames, formatLensName } from '../utils/lensUtils';
 
@@ -349,6 +350,9 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
       </div>
+
+      {/* Universal lens search */}
+      <UniversalSearch shopId={shop?.id || null} isDemo={isDemo} />
 
       {/* Alerts */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-orange-200 dark:border-orange-800/50 shadow-sm overflow-hidden">

@@ -160,7 +160,8 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const lensRows = customRows;
 
-  const showAxis = powerType !== 'SPH' && powerType !== 'Cross Compound' && !(powerType === 'Compound' && vision === 'single vision');
+  // Single vision lenses never have an axis, so the Axis column is hidden for them (any sign, material, coating or power type).
+  const showAxis = vision !== 'single vision' && powerType !== 'SPH' && powerType !== 'Cross Compound';
 
   useEffect(() => {
     if (!showAxis) {

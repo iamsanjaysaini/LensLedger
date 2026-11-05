@@ -813,7 +813,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                           </select>
                         </td>
                       )}
-                      <td className="px-1 py-1.5 whitespace-nowrap text-[10px] text-center text-gray-400 dark:text-gray-500">{origQty.toFixed(2)}</td>
+                      <td className="px-1 py-1.5 whitespace-nowrap text-[12px] text-center text-gray-600 dark:text-gray-700">{origQty.toFixed(2)}</td>
 
                       {!isEditMode ? (
                         <>

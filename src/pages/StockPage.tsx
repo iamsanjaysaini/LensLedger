@@ -821,7 +821,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                           <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-center gap-1.5">
                               <button onClick={(e) => { e.stopPropagation(); handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, -0.5); }} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Minus className="w-6 h-6" /></button>
-                              <span className={`w-12 text-center text-[10px] font-bold ${delta === 0 ? 'text-gray-300 dark:text-gray-600' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                              <span className={`w-12 text-center text-[12px] font-bold ${delta === 0 ? 'text-gray-600 dark:text-gray-800' : 'text-indigo-600 dark:text-indigo-400'}`}>
                                 {delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}
                               </span>
                               <button onClick={(e) => { e.stopPropagation(); handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, 0.5); }} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"><Plus className="w-6 h-6" /></button>

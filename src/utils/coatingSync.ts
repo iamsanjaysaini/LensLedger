@@ -1,6 +1,6 @@
 // src/utils/coatingSync.ts
 // Coatings ki list ab Supabase ki `coatings` table me rahti hai (mobile + PC same list).
-// Delete = "soft delete" (is_active = false). Koi row ya stock data kabhi delete nahi hota.
+// OFF = "soft off" (is_active = false). Koi row ya stock data kabhi delete nahi hota.
 // Agar `coatings` table abhi nahi bani (SQL nahi chali) ya demo mode hai, to purane tareeke se
 // browser ki localStorage use hoti hai, isliye app kabhi toot-ta nahi.
 import { useCallback, useEffect, useState } from 'react';
@@ -139,23 +139,27 @@ export async function addCoating(isDemo: boolean, rawName: string): Promise<Coat
   return { ok: true, name };
 }
 
-// ---------- delete ----------
-export async function deleteCoating(isDemo: boolean, name: string): Promise<CoatingResult> {
-  if (PROTECTED_COATINGS.includes(name)) {
-    return { ok: false, message: `"${name}" delete nahi ho sakti.` };
-  }
+// ---------- stock count (sirf padhta hai) ----------
+// Kisi bhi shop ki lens_stock me is coating ka quantity > 0 wali rows ki ginti.
+// null = check nahi ho paya (error). Demo mode me check nahi hota, 0 maana jata hai.
+export async function countCoatingStock(isDemo: boolean, name: string): Promise<number | null> {
+  if (isDemo) return 0;
+  const { count, error } = await supabase
+    .from('lens_stock')
+    .select('id', { count: 'exact', head: true })
+    .contains('coatings', [name])
+    .gt('quantity', 0);
+  if (error) return null;
+  return count ?? 0;
+}
 
-  // Stock check: kisi bhi shop ki lens_stock me is coating ka quantity > 0 ho to delete nahi hogi.
-  if (!isDemo) {
-    const { count, error } = await supabase
-      .from('lens_stock')
-      .select('id', { count: 'exact', head: true })
-      .contains('coatings', [name])
-      .gt('quantity', 0);
-    if (error) return { ok: false, message: 'Stock check nahi ho paya, isliye coating delete nahi hui.' };
-    if ((count ?? 0) > 0) {
-      return { ok: false, message: `"${name}" delete nahi ho sakti: ${count} lens row me stock bacha hai.` };
-    }
+// ---------- on / off ----------
+// OFF = coating sirf chhup jati hai (is_active = false). Stock, sales, orders me kuch nahi badalta.
+export async function setCoatingActive(isDemo: boolean, name: string, active: boolean): Promise<CoatingResult> {
+  if (active) return addCoating(isDemo, name); // ON = wapas add / reactivate
+
+  if (PROTECTED_COATINGS.includes(name)) {
+    return { ok: false, message: `"${name}" ko off nahi kiya ja sakta.` };
   }
 
   const state = await loadState(isDemo);
@@ -165,13 +169,13 @@ export async function deleteCoating(isDemo: boolean, name: string): Promise<Coat
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('name', name)
       .select('id');
-    if (error) return { ok: false, message: 'Coating delete nahi ho payi. Dobara try karein.' };
+    if (error) return { ok: false, message: 'Coating off nahi ho payi. Dobara try karein.' };
     if (!data || data.length === 0) {
       const next = state.rows.reduce((m, r) => Math.max(m, r.sort_order), 0) + 1;
       const { error: insErr } = await supabase
         .from('coatings')
         .insert({ name, is_active: false, sort_order: next });
-      if (insErr) return { ok: false, message: 'Coating delete nahi ho payi. Dobara try karein.' };
+      if (insErr) return { ok: false, message: 'Coating off nahi ho payi. Dobara try karein.' };
     }
     writeList(ACTIVE_KEY, state.active.filter(n => n !== name));
   } else {
@@ -180,6 +184,25 @@ export async function deleteCoating(isDemo: boolean, name: string): Promise<Coat
   }
   notifyChange();
   return { ok: true, name };
+}
+
+// ---------- gear popup ke liye poori list (on + off) ----------
+export interface CoatingItem {
+  name: string;
+  is_active: boolean;
+  locked: boolean; // HC, HMC, Bluecut: hamesha ON
+}
+
+export async function loadAllCoatings(isDemo: boolean): Promise<CoatingItem[]> {
+  const s = await loadState(isDemo);
+  let list: { name: string; on: boolean }[];
+  if (s.mode === 'db') {
+    list = s.rows.map(r => ({ name: r.name, on: s.active.includes(r.name) }));
+    s.active.forEach(a => { if (!list.some(x => x.name === a)) list.unshift({ name: a, on: true }); });
+  } else {
+    list = [...s.active.map(name => ({ name, on: true })), ...s.deleted.map(name => ({ name, on: false }))];
+  }
+  return list.map(x => ({ name: x.name, is_active: x.on, locked: PROTECTED_COATINGS.includes(x.name) }));
 }
 
 // ---------- React hooks ----------
@@ -198,19 +221,18 @@ export function useCoatings(isDemo: boolean) {
   }, [refresh]);
 
   const add = useCallback((name: string) => addCoating(isDemo, name), [isDemo]);
-  const remove = useCallback((name: string) => deleteCoating(isDemo, name), [isDemo]);
 
-  return { availableCoatings, addCoating: add, deleteCoating: remove };
+  return { availableCoatings, addCoating: add };
 }
 
-export function useDeletedCoatings(isDemo: boolean, enabled: boolean) {
-  const [deleted, setDeleted] = useState<string[]>([]);
+export function useAllCoatings(isDemo: boolean, enabled: boolean) {
+  const [items, setItems] = useState<CoatingItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const s = await loadCoatings(isDemo);
-    setDeleted(s.deleted);
+    const list = await loadAllCoatings(isDemo);
+    setItems(list);
     setLoading(false);
   }, [isDemo]);
 
@@ -221,5 +243,5 @@ export function useDeletedCoatings(isDemo: boolean, enabled: boolean) {
     return () => window.removeEventListener(CHANGE_EVENT, refresh);
   }, [enabled, refresh]);
 
-  return { deleted, loading };
+  return { items, loading };
 }

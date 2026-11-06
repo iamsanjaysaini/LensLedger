@@ -9,7 +9,6 @@ import {
   getDefaultAxis,
   MATERIALS,
   VISIONS,
-  PROTECTED_COATINGS,
   formatLensName,
   Material,
   Vision,
@@ -52,7 +51,16 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [customPower, setCustomPower] = useState('');
   const [customQty, setCustomQty] = useState('1.0');
   const [customSaving, setCustomSaving] = useState(false);
-  const { availableCoatings, addCoating, deleteCoating: removeCoating } = useCoatings(isDemo);
+  const { availableCoatings, addCoating } = useCoatings(isDemo);
+
+  // Agar gear se koi coating OFF ho jaye to page par chuni hui coating bhi hat jati hai.
+  useEffect(() => {
+    setCoatings(prev => {
+      const next = prev.filter(c => availableCoatings.includes(c));
+      if (next.length === prev.length) return prev;
+      return next.length ? next : ['HC'];
+    });
+  }, [availableCoatings]);
   const [deltas, setDeltas] = useState<Record<string, { qty: number; name: string }>>({});
   const [loading, setLoading] = useState(false);
   const [customRows, setCustomRows] = useState<CustomLensRow[]>([]);
@@ -506,11 +514,6 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     setCustomCoating('');
   };
 
-  const deleteCoating = async (c: string) => {
-    const res = await removeCoating(c);
-    if (!res.ok) { showToast(res.message || 'Coating delete nahi hui.', 'error'); return; }
-    setCoatings(coatings.filter(item => item !== c));
-  };
 
   const generateOrderReport = async () => {
     setLoading(true);
@@ -670,15 +673,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               {availableCoatings.map(c => (
                 <div key={c} className="relative inline-flex items-center">
                   <button onClick={() => toggleCoating(c)}
-                    className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'} ${!PROTECTED_COATINGS.includes(c) ? 'pr-5' : ''}`}>
+                    className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`}>
                     {c}
                   </button>
-                  {!PROTECTED_COATINGS.includes(c) && (
-                    <button onClick={(e) => { e.stopPropagation(); deleteCoating(c); }}
-                      className={`absolute right-1 transition-colors ${coatings.includes(c) ? 'text-indigo-200 hover:text-white' : 'text-gray-400 hover:text-red-500'}`}>
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
                 </div>
               ))}
             </div>

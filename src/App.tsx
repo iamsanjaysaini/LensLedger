@@ -8,6 +8,7 @@ import SellPage from './pages/SellPage';
 import ReportsPage from './pages/ReportsPage';
 import Auth from './components/Auth';
 import { ToastContainer } from './components/Toast';
+import CoatingSettings from './components/CoatingSettings';
 import { LayoutDashboard, Package, ShoppingCart, LogOut, Tag, FileText } from 'lucide-react';
 import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 
@@ -92,6 +93,7 @@ function App() {
                   {session?.user?.email}
                 </span>
               </div>
+              <CoatingSettings isDemo={!isConfigured} />
               <button
                 onClick={() => isConfigured ? supabase.auth.signOut() : setSession(null)}
                 className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 border border-transparent text-[10px] sm:text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all"

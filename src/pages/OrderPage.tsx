@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/Toast';
+import { useCoatings } from '../utils/coatingSync';
 import {
   generateLensRows,
   fetchCustomLensRows,
@@ -8,7 +9,6 @@ import {
   getDefaultAxis,
   MATERIALS,
   VISIONS,
-  DEFAULT_COATINGS,
   PROTECTED_COATINGS,
   formatLensName,
   Material,
@@ -52,20 +52,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [customPower, setCustomPower] = useState('');
   const [customQty, setCustomQty] = useState('1.0');
   const [customSaving, setCustomSaving] = useState(false);
-  const [availableCoatings, setAvailableCoatings] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('availableCoatings');
-      if (saved) {
-        let c = JSON.parse(saved);
-        if (c.includes('Bluecut green')) {
-          c = c.map((x: string) => x === 'Bluecut green' ? 'Bluecut' : x);
-          localStorage.setItem('availableCoatings', JSON.stringify(c));
-        }
-        return c;
-      }
-      return DEFAULT_COATINGS;
-    } catch { return DEFAULT_COATINGS; }
-  });
+  const { availableCoatings, addCoating, deleteCoating: removeCoating } = useCoatings(isDemo);
   const [deltas, setDeltas] = useState<Record<string, { qty: number; name: string }>>({});
   const [loading, setLoading] = useState(false);
   const [customRows, setCustomRows] = useState<CustomLensRow[]>([]);
@@ -511,21 +498,18 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     }
   };
 
-  const addCustomCoating = () => {
-    if (customCoating && !availableCoatings.includes(customCoating)) {
-      const updated = [...availableCoatings, customCoating];
-      setAvailableCoatings(updated);
-      localStorage.setItem('availableCoatings', JSON.stringify(updated));
-      setCoatings(coatings.includes('Photo Grey') ? ['Photo Grey', customCoating] : [customCoating]);
-      setCustomCoating('');
-    }
+  const addCustomCoating = async () => {
+    const res = await addCoating(customCoating);
+    if (!res.ok) { showToast(res.message || 'Coating add nahi hui.', 'error'); return; }
+    const photoGreySelected = coatings.includes('Photo Grey');
+    setCoatings(photoGreySelected ? ['Photo Grey', res.name as string] : [res.name as string]);
+    setCustomCoating('');
   };
 
-  const deleteCoating = (c: string) => {
-    const updated = availableCoatings.filter(i => i !== c);
-    setAvailableCoatings(updated);
-    localStorage.setItem('availableCoatings', JSON.stringify(updated));
-    setCoatings(coatings.filter(i => i !== c));
+  const deleteCoating = async (c: string) => {
+    const res = await removeCoating(c);
+    if (!res.ok) { showToast(res.message || 'Coating delete nahi hui.', 'error'); return; }
+    setCoatings(coatings.filter(item => item !== c));
   };
 
   const generateOrderReport = async () => {

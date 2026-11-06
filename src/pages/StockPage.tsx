@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/Toast';
+import { useCoatings } from '../utils/coatingSync';
 import {
   generateLensRows,
   getDefaultAxis,
   MATERIALS,
   VISIONS,
-  DEFAULT_COATINGS,
   PROTECTED_COATINGS,
   formatLensName,
   Material,
@@ -32,20 +32,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [powerType, setPowerType] = useState<PowerType>('SPH');
   const [rowAxes, setRowAxes] = useState<Record<string, number>>({});
   const [customCoating, setCustomCoating] = useState('');
-  const [availableCoatings, setAvailableCoatings] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('availableCoatings');
-      if (saved) {
-        let coatings = JSON.parse(saved);
-        if (coatings.includes('Bluecut green')) {
-          coatings = coatings.map((c: string) => c === 'Bluecut green' ? 'Bluecut' : c);
-          localStorage.setItem('availableCoatings', JSON.stringify(coatings));
-        }
-        return coatings;
-      }
-      return DEFAULT_COATINGS;
-    } catch { return DEFAULT_COATINGS; }
-  });
+  const { availableCoatings, addCoating, deleteCoating: removeCoating } = useCoatings(isDemo);
   const [deltas, setDeltas] = useState<Record<string, number>>({});
   const [originalStock, setOriginalStock] = useState<Record<string, number>>({});
   const [originalAlertQty, setOriginalAlertQty] = useState<Record<string, number>>({});
@@ -334,21 +321,17 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     }
   };
 
-  const addCustomCoating = () => {
-    if (customCoating && !availableCoatings.includes(customCoating)) {
-      const updated = [...availableCoatings, customCoating];
-      setAvailableCoatings(updated);
-      localStorage.setItem('availableCoatings', JSON.stringify(updated));
-      const photoGreySelected = coatings.includes('Photo Grey');
-      setCoatings(photoGreySelected ? ['Photo Grey', customCoating] : [customCoating]);
-      setCustomCoating('');
-    }
+  const addCustomCoating = async () => {
+    const res = await addCoating(customCoating);
+    if (!res.ok) { showToast(res.message || 'Coating add nahi hui.', 'error'); return; }
+    const photoGreySelected = coatings.includes('Photo Grey');
+    setCoatings(photoGreySelected ? ['Photo Grey', res.name as string] : [res.name as string]);
+    setCustomCoating('');
   };
 
-  const deleteCoating = (c: string) => {
-    const updated = availableCoatings.filter(item => item !== c);
-    setAvailableCoatings(updated);
-    localStorage.setItem('availableCoatings', JSON.stringify(updated));
+  const deleteCoating = async (c: string) => {
+    const res = await removeCoating(c);
+    if (!res.ok) { showToast(res.message || 'Coating delete nahi hui.', 'error'); return; }
     setCoatings(coatings.filter(item => item !== c));
   };
 

@@ -62,6 +62,40 @@ export function getDefaultShopId(shops: Shop[], email?: string): string {
   return shops[0]?.id || '';
 }
 
+export const VISION_LABELS: Record<Vision, string> = {
+  'single vision': 'SV',
+  'KT': 'KT',
+  'Prograssive': 'PROGRASSIVE',
+};
+
+// Plano (zero power) ki apni list: single vision me "-" list, KT / Prograssive me "+" list.
+export function planoSignFor(vision: string): Sign {
+  return vision === 'single vision' ? '-' : '+';
+}
+
+// SPH list me Plano rows sirf apni sahi sign wali list me rakho, doosri sign wali list se hata do.
+export function filterPlanoRows<T extends { sph: string }>(
+  rows: T[],
+  vision: string,
+  sign: Sign | null,
+  powerType: string
+): T[] {
+  if (powerType !== 'SPH' || sign === null || sign === planoSignFor(vision)) return rows;
+  return rows.filter(row => parseFloat(row.sph) !== 0);
+}
+
+// Galat sign me padi Plano stock row (jaise single vision "+" ya KT/Prograssive "-") ko pehchano.
+export function isPlanoMisplaced(vision: string, sign: string | null, powerType: string, sph: number): boolean {
+  if (powerType !== 'SPH' || sph !== 0 || !sign) return false;
+  return sign !== planoSignFor(vision);
+}
+
+// Purane sale records me KT / Prograssive Plano ka sign "-" likha hota tha, ab stock "+" me hai.
+export function normalizePlanoSign(vision: string, powerType: string, sph: number, sign: string | null): string | null {
+  if ((vision === 'KT' || vision === 'Prograssive') && powerType === 'SPH' && sph === 0) return '+';
+  return sign;
+}
+
 export const PROTECTED_COATINGS = ['HC', 'HMC', 'Bluecut'];
 
 export function generatePowerList(includeZero: boolean = true, max: number = 6.0) {
@@ -204,8 +238,10 @@ export function generateLensRows(powerType: PowerType, vision: Vision = 'single 
   if (powerType === 'SPH') {
     const sphMax = isKT ? 3.0 : 6.0;
     const sphs = generatePowerList(true, sphMax);
+    const planoSign = planoSignFor(vision);
     sphs.forEach(s => {
-      if (parseFloat(s) === 0 && sign === '+') {
+      // Plano sirf apni list me aata hai (SV: "-", KT/Prograssive: "+")
+      if (parseFloat(s) === 0 && sign !== null && sign !== planoSign) {
         return;
       }
       adds.forEach(add => {
@@ -386,7 +422,7 @@ export function parseLensName(name: string): ParsedLens | null {
 
   if (/\bPlano\b/i.test(text)) {
     powerType = 'SPH';
-    sign = '-';
+    sign = planoSignFor(vision);
     sph = '0.00';
     cyl = '0.00';
     text = text.replace(/\bPlano\b/i, '');
@@ -472,9 +508,7 @@ export async function isStockLens(parsed: ParsedLens | null): Promise<boolean> {
   if (!custom) {
     custom = generateLensRows(parsed.powerType, parsed.vision, parsed.sign);
   }
-  if (parsed.sign === '+' && parsed.powerType === 'SPH') {
-    custom = custom.filter(row => parseFloat(row.sph) !== 0);
-  }
+  custom = filterPlanoRows(custom, parsed.vision, parsed.sign, parsed.powerType);
 
   const sphVal = parseFloat(parsed.sph).toFixed(2);
   const cylVal = parseFloat(parsed.cyl).toFixed(2);

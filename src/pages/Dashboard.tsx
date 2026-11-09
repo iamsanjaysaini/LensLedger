@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { showToast } from '../components/Toast';
 import UniversalSearch from '../components/UniversalSearch';
 import { ChevronRight, Bell, ChevronLeft, AlertTriangle, Calendar, Plus, Minus, ShoppingCart, Loader2 } from 'lucide-react';
-import { Shop, sortLensNames, formatLensName } from '../utils/lensUtils';
+import { Shop, sortLensNames, formatLensName, isPlanoMisplaced } from '../utils/lensUtils';
 
 interface LowStockItem {
   id: string;
@@ -162,7 +162,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
       );
       const items: LowStockItem[] = [];
       (stockDataAll || []).forEach((item: any) => {
-        if (item.power_type === 'SPH' && Number(item.sph) === 0 && item.sign === '+') {
+        if (isPlanoMisplaced(item.vision, item.sign, item.power_type, Number(item.sph))) {
           return;
         }
         const coatingsKey = (item.coatings || []).join(',');

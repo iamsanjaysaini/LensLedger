@@ -1,523 +1,854 @@
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { showToast } from '../components/Toast';
+import { useCoatings } from '../utils/coatingSync';
+import {
+  generateLensRows,
+  getDefaultAxis,
+  MATERIALS,
+  VISIONS,
+  VISION_LABELS,
+  filterPlanoRows,
+  formatLensName,
+  Material,
+  Vision,
+  PowerType,
+  Sign,
+  KT_AXIS,
+  PROGRESSIVE_AXIS,
+  Shop,
+  fetchCustomLensRows,
+  saveCustomLensRows,
+  CustomLensRow
+} from '../utils/lensUtils';
+import { Plus, Minus, Save, Edit2, Check, X, Trash2, ChevronUp, ChevronDown, BellOff, Bell } from 'lucide-react';
 
-export type Material = 'CR' | 'Poly' | 'Glass';
-export type Vision = 'single vision' | 'KT' | 'Prograssive';
-export type PowerType = 'SPH' | 'CYL' | 'Compound' | 'Cross Compound';
-export type Sign = '+' | '-';
+export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [selectedShop, setSelectedShop] = useState('');
+  const [material, setMaterial] = useState<Material>('CR');
+  const [vision, setVision] = useState<Vision>('single vision');
+  const [coatings, setCoatings] = useState<string[]>(['HC']);
+  const [sign, setSign] = useState<Sign>('-');
+  const [powerType, setPowerType] = useState<PowerType>('SPH');
+  const [rowAxes, setRowAxes] = useState<Record<string, number>>({});
+  const [customCoating, setCustomCoating] = useState('');
+  const { availableCoatings, addCoating } = useCoatings(isDemo);
 
-export interface CustomLensRow {
-  sph: string;
-  cyl: string;
-  add?: string;
-}
+  // Agar gear se koi coating OFF ho jaye to page par chuni hui coating bhi hat jati hai.
+  useEffect(() => {
+    setCoatings(prev => {
+      const next = prev.filter(c => availableCoatings.includes(c));
+      if (next.length === prev.length) return prev;
+      return next.length ? next : ['HC'];
+    });
+  }, [availableCoatings]);
+  const [deltas, setDeltas] = useState<Record<string, number>>({});
+  const [originalStock, setOriginalStock] = useState<Record<string, number>>({});
+  const [originalAlertQty, setOriginalAlertQty] = useState<Record<string, number>>({});
+  const [originalAlertStatus, setOriginalAlertStatus] = useState<Record<string, string>>({});
+  const [editedAlertQtys, setEditedAlertQtys] = useState<Record<string, number>>({});
+  const [editedAlertStatuses, setEditedAlertStatuses] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [customRows, setCustomRows] = useState<CustomLensRow[]>([]);
+  const [selectedRowIndexes, setSelectedRowIndexes] = useState<Set<number>>(new Set());
+  const [newRowPower, setNewRowPower] = useState({ sph: '', cyl: '', add: '' });
+  const [insertAt, setInsertAt] = useState<number | null>(null);
+  const [isIgnored, setIsIgnored] = useState(false);
+  const [ignoreLoading, setIgnoreLoading] = useState(false);
 
-export interface LensStock {
-  id?: string;
-  shop_id: string;
-  material: Material;
-  vision: Vision;
-  sign: Sign | null;
-  power_type: PowerType;
-  sph: number;
-  cyl: number;
-  axis: number | null;
-  coatings: string[];
-  quantity: number;
-}
+  useEffect(() => {
+    async function loadRows() {
+      setLoading(true);
+      let custom = await fetchCustomLensRows(material, vision, sign, powerType, coatings);
+      if (!custom) {
+        custom = generateLensRows(powerType, vision, sign);
+      }
+      custom = filterPlanoRows(custom, vision, sign, powerType);
+      setCustomRows(custom);
+      setLoading(false);
+    }
+    loadRows();
+  }, [material, vision, sign, powerType, coatings]);
 
-export interface Shop {
-  id: string;
-  name: string;
-}
+  const lensRows = customRows;
 
-export interface ParsedLens {
-  material: Material;
-  vision: Vision;
-  sign: Sign;
-  powerType: PowerType;
-  sph: string;
-  cyl: string;
-  axis?: number;
-  add?: string;
-  coatings: string[];
-}
+  // Single vision lenses never have an axis, so the Axis column is hidden for them (any sign, material, coating or power type).
+  const showAxis = vision !== 'single vision' && powerType !== 'SPH' && powerType !== 'Cross Compound';
 
-export const MATERIALS: Material[] = ['CR', 'Poly', 'Glass'];
-export const VISIONS: Vision[] = ['single vision', 'KT', 'Prograssive'];
-export const DEFAULT_COATINGS = ['HC', 'HMC', 'Bluecut', 'Bluecut Dual coat', 'Bluecut Blue', 'Photo Grey'];
-
-// ✅ Default Shop Mapping — email ke hisaab se default shop name
-export const DEFAULT_SHOP_MAPPING: Record<string, string> = {
-  'iamsanjaysaini@gmail.com': 'Narbada Eye Care',
-  'sumitsainibrd@gmail.com': 'Narbada Eye Care',
-};
-
-// ✅ Helper function — shops array aur email do, default shop id milega
-export function getDefaultShopId(shops: Shop[], email?: string): string {
-  const shopName = email ? DEFAULT_SHOP_MAPPING[email] : 'Narbada Eye Care';
-  const matched = shops.find(s => s.name === (shopName || 'Narbada Eye Care'));
-  if (matched) return matched.id;
-  const narbada = shops.find(s => s.name.toLowerCase().includes('narbada'));
-  if (narbada) return narbada.id;
-  return shops[0]?.id || '';
-}
-
-export const VISION_LABELS: Record<Vision, string> = {
-  'single vision': 'SV',
-  'KT': 'KT',
-  'Prograssive': 'PROGRASSIVE',
-};
-
-// Plano (zero power) ki apni list: single vision me "-" list, KT / Prograssive me "+" list.
-export function planoSignFor(vision: string): Sign {
-  return vision === 'single vision' ? '-' : '+';
-}
-
-// SPH list me Plano rows sirf apni sahi sign wali list me rakho, doosri sign wali list se hata do.
-export function filterPlanoRows<T extends { sph: string }>(
-  rows: T[],
-  vision: string,
-  sign: Sign | null,
-  powerType: string
-): T[] {
-  if (powerType !== 'SPH' || sign === null || sign === planoSignFor(vision)) return rows;
-  return rows.filter(row => parseFloat(row.sph) !== 0);
-}
-
-// Galat sign me padi Plano stock row (jaise single vision "+" ya KT/Prograssive "-") ko pehchano.
-export function isPlanoMisplaced(vision: string, sign: string | null, powerType: string, sph: number): boolean {
-  if (powerType !== 'SPH' || sph !== 0 || !sign) return false;
-  return sign !== planoSignFor(vision);
-}
-
-// Purane sale records me KT / Prograssive Plano ka sign "-" likha hota tha, ab stock "+" me hai.
-export function normalizePlanoSign(vision: string, powerType: string, sph: number, sign: string | null): string | null {
-  if ((vision === 'KT' || vision === 'Prograssive') && powerType === 'SPH' && sph === 0) return '+';
-  return sign;
-}
-
-export const PROTECTED_COATINGS = ['HC', 'HMC', 'Bluecut'];
-
-export function generatePowerList(includeZero: boolean = true, max: number = 6.0) {
-  const powers = [];
-  const start = includeZero ? 0 : 0.25;
-  for (let i = start; i <= max; i += 0.25) {
-    powers.push(i.toFixed(2));
-  }
-  return powers;
-}
-
-export async function fetchCustomLensRows(
-  material: Material,
-  vision: Vision,
-  sign: Sign | null,
-  powerType: PowerType,
-  coatings: string[] = []
-): Promise<CustomLensRow[] | null> {
-  let query = supabase
-    .from('custom_lens_rows')
-    .select('sph, cyl, addition')
-    .eq('material', material)
-    .eq('vision', vision)
-    .eq('power_type', powerType)
-    .filter('coatings', 'eq', `{${coatings.join(',')}}`);
-
-  if (sign === null) {
-    query = query.is('sign', null);
-  } else {
-    query = query.eq('sign', sign);
-  }
-
-  const { data, error } = await query.order('sort_order', { ascending: true });
-
-  if (error) {
-    console.error('Error fetching custom lens rows:', error);
-    return null;
-  }
-
-  if (!data || data.length === 0) return null;
-
-  // Deduplicate rows to prevent any duplicate power appearing in the list
-  const seen = new Set<string>();
-  const uniqueRows: CustomLensRow[] = [];
-
-  for (const row of data) {
-    const sphStr = row.sph.toFixed(2);
-    const cylStr = row.cyl.toFixed(2);
-    const addStr = row.addition ? row.addition.toFixed(2) : undefined;
-    const key = `${sphStr}:${cylStr}:${addStr || ''}`;
-
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniqueRows.push({
-        sph: sphStr,
-        cyl: cylStr,
-        add: addStr
+  useEffect(() => {
+    if (!showAxis) {
+      setRowAxes({});
+      return;
+    }
+    const defaultAxis = getDefaultAxis(vision, sign, powerType);
+    if (defaultAxis !== undefined) {
+      const newAxes: Record<string, number> = {};
+      lensRows.forEach((row, index) => {
+        newAxes[`${row.sph}-${row.cyl}-${row.add || ''}-${index}`] = defaultAxis;
       });
+      setRowAxes(newAxes);
+    } else {
+      setRowAxes({});
     }
-  }
+  }, [vision, sign, powerType, lensRows, showAxis]);
 
-  return uniqueRows;
-}
-
-export async function saveCustomLensRows(
-  material: Material,
-  vision: Vision,
-  sign: Sign | null,
-  powerType: PowerType,
-  rows: CustomLensRow[],
-  coatings: string[] = []
-) {
-  let deleteQuery = supabase
-    .from('custom_lens_rows')
-    .delete()
-    .eq('material', material)
-    .eq('vision', vision)
-    .eq('power_type', powerType)
-    .filter('coatings', 'eq', `{${coatings.join(',')}}`);
-
-  if (sign === null) {
-    deleteQuery = deleteQuery.is('sign', null);
-  } else {
-    deleteQuery = deleteQuery.eq('sign', sign);
-  }
-
-  const { error: deleteError } = await deleteQuery;
-
-  if (deleteError) {
-    console.error('Error deleting old custom lens rows:', deleteError);
-    return { error: deleteError };
-  }
-
-  // Deduplicate rows before saving to prevent any duplicates
-  const seen = new Set<string>();
-  const uniqueRows: CustomLensRow[] = [];
-  for (const r of rows) {
-    const sphFixed = parseFloat(r.sph).toFixed(2);
-    const cylFixed = parseFloat(r.cyl).toFixed(2);
-    const addFixed = r.add ? parseFloat(r.add).toFixed(2) : '';
-    const key = `${sphFixed}:${cylFixed}:${addFixed}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniqueRows.push(r);
-    }
-  }
-
-  const inserts = uniqueRows.map((row, index) => ({
-    material,
-    vision,
-    sign,
-    power_type: powerType,
-    coatings,
-    sph: parseFloat(row.sph),
-    cyl: parseFloat(row.cyl),
-    addition: row.add ? parseFloat(row.add) : null,
-    sort_order: index
-  }));
-
-  const { error: insertError } = await supabase
-    .from('custom_lens_rows')
-    .insert(inserts);
-
-  if (insertError) {
-    console.error('Error inserting custom lens rows:', insertError);
-    return { error: insertError };
-  }
-
-  return { success: true };
-}
-
-export function generateLensRows(powerType: PowerType, vision: Vision = 'single vision', sign: Sign | null = null) {
-  const rows: CustomLensRow[] = [];
-  const isKT = vision === 'KT';
-  const isProg = vision === 'Prograssive';
-  const isKTOrProg = isKT || isProg;
-
-  const adds = isKTOrProg ? generatePowerList(false, 3.0).filter(p => parseFloat(p) >= 1.0) : [undefined];
-
-  if (powerType === 'SPH') {
-    const sphMax = isKT ? 3.0 : 6.0;
-    const sphs = generatePowerList(true, sphMax);
-    const planoSign = planoSignFor(vision);
-    sphs.forEach(s => {
-      // Plano sirf apni list me aata hai (SV: "-", KT/Prograssive: "+")
-      if (parseFloat(s) === 0 && sign !== null && sign !== planoSign) {
+  useEffect(() => {
+    async function fetchShops() {
+      if (isDemo) {
+        const demoShops = [
+          { id: '1', name: 'Narbada Eye Care' }
+        ];
+        setShops(demoShops);
+        setSelectedShop(demoShops[0].id);
         return;
       }
-      adds.forEach(add => {
-        rows.push({ sph: s, cyl: '0.00', add });
-      });
-    });
-  } else if (powerType === 'CYL') {
-    const cyls = generatePowerList(false, 2.0);
-    cyls.forEach(c => {
-      adds.forEach(add => {
-        rows.push({ sph: '0.00', cyl: c, add });
-      });
-    });
-  } else if (powerType === 'Compound' || powerType === 'Cross Compound') {
-    const cylStart = 0.25;
-    const cylEnd = 2.0;
-    const sphMax = isKT ? 3.0 : 6.0;
+      const { data } = await supabase.from('shops').select('*');
+      if (data && data.length > 0) {
+        const narbada = data.find(s => s.name.toLowerCase().includes('narbada')) || data[0];
+        setShops([narbada]);
+        setSelectedShop(narbada.id);
+      }
+    }
+    fetchShops();
+  }, [isDemo]);
 
-    for (let s = 0.25; s <= sphMax; s += 0.25) {
-      for (let c = cylStart; c <= cylEnd; c += 0.25) {
-        if (powerType === 'Cross Compound' && s === 0.25 && c === 0.25) continue;
+  useEffect(() => {
+    if (selectedShop && !isDemo) {
+      fetchStock();
+    }
+    setDeltas({});
+    setEditedAlertQtys({});
+    setEditedAlertStatuses({});
+  }, [selectedShop, material, vision, coatings, sign, powerType, isDemo]);
 
-        adds.forEach(add => {
-          rows.push({
-            sph: s.toFixed(2),
-            cyl: c.toFixed(2),
-            add
-          });
+  async function fetchStock() {
+    setLoading(true);
+    try {
+      let query = supabase
+        .from('lens_stock')
+        .select('*')
+        .eq('shop_id', selectedShop)
+        .eq('material', material)
+        .eq('vision', vision)
+        .eq('sign', sign)
+        .eq('power_type', powerType);
+
+      query = query.eq('coatings', `{${coatings.join(',')}}`);
+
+      if (powerType === 'SPH') {
+        query = query.eq('cyl', 0);
+      } else if (powerType === 'CYL') {
+        query = query.gt('cyl', 0).lte('cyl', 6.0);
+      } else {
+        query = query.gte('cyl', 0.25);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const stockMap: Record<string, number> = {};
+      const alertQtyMap: Record<string, number> = {};
+      const alertStatusMap: Record<string, string> = {};
+      if (data) {
+        data.forEach((item) => {
+          const axisVal = item.axis !== null && item.axis !== undefined ? item.axis : '';
+          const addVal = item.addition !== null && item.addition !== undefined ? item.addition.toFixed(2) : '';
+          const key = `${item.sph.toFixed(2)}:${item.cyl.toFixed(2)}:${axisVal}:${addVal}`;
+          stockMap[key] = Number(item.quantity);
+          alertQtyMap[key] = item.alert_qty !== null && item.alert_qty !== undefined ? Number(item.alert_qty) : 0.00;
+          alertStatusMap[key] = item.alert_status !== null && item.alert_status !== undefined ? String(item.alert_status) : 'ON';
         });
       }
+      setOriginalStock(stockMap);
+      setOriginalAlertQty(alertQtyMap);
+      setOriginalAlertStatus(alertStatusMap);
+    } catch (error) {
+      console.error("Fetch error:", error);
+    } finally {
+      setLoading(false);
     }
   }
 
-  return rows;
-}
+  const fetchIgnoreStatus = useCallback(async () => {
+    if (!selectedShop || isDemo) return;
+    const { data } = await supabase
+      .from('alert_ignores')
+      .select('id')
+      .eq('shop_id', selectedShop)
+      .eq('material', material)
+      .eq('vision', vision)
+      .eq('sign', sign)
+      .eq('power_type', powerType)
+      .filter('coatings', 'eq', `{${coatings.join(',')}}`)
+      .maybeSingle();
+    setIsIgnored(!!data);
+  }, [selectedShop, material, vision, sign, powerType, coatings, isDemo]);
 
-export function getDefaultAxis(vision: Vision, sign: Sign | null, powerType: PowerType): number | undefined {
-  if (vision !== 'KT') return undefined;
-  if (powerType === 'SPH' || powerType === 'Cross Compound') return undefined;
+  useEffect(() => {
+    fetchIgnoreStatus();
+  }, [fetchIgnoreStatus]);
 
-  if (sign === '+') return 180;
-  if (sign === '-') return 90;
-
-  return undefined;
-}
-
-export function formatLensName(
-  material: Material,
-  vision: Vision,
-  sign: Sign | null,
-  powerType: PowerType,
-  sph: string,
-  cyl: string,
-  coatings: string[],
-  axis?: number,
-  add?: string
-) {
-  const isSV = vision === 'single vision';
-  const isKT = vision === 'KT';
-  const isProg = vision === 'Prograssive';
-
-  const materialPart = material === 'CR' ? '' : material;
-  const visionPart = isSV ? '' : vision;
-  const coatingPart = coatings.join(' ');
-
-  let powerPart = '';
-  const signPart = sign || '';
-
-  if (sph === '0.00' && powerType === 'SPH') {
-    powerPart = `Plano`;
-  } else if (powerType === 'SPH') {
-    powerPart = `${signPart}${sph} SPH`;
-  } else if (powerType === 'CYL') {
-    powerPart = `${signPart}${cyl} CYL`;
-  } else if (powerType === 'Compound') {
-    powerPart = `${signPart}${sph}/${signPart}${cyl}`;
-  } else if (powerType === 'Cross Compound') {
-    const oppSign = sign === '+' ? '-' : '+';
-    powerPart = `${signPart}${sph}/${oppSign}${cyl}`;
-  }
-
-  let addPart = '';
-  if (add && (isKT || isProg)) {
-    addPart = `ADD +${parseFloat(add).toFixed(2)}`;
-  }
-
-  let axisPart = '';
-  if (powerType !== 'SPH' && powerType !== 'Cross Compound' && (isKT || isProg)) {
-    axisPart = axis ? `AXIS ${axis}` : '';
-  }
-
-  return [powerPart, addPart, axisPart, coatingPart, materialPart, visionPart]
-    .filter(part => part !== '')
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-export const KT_AXIS = [45, 90, 135, 180];
-export const PROGRESSIVE_AXIS = [30, 60, 90, 120, 150, 180];
-
-export function formatReportQty(qty: number): string {
-  const whole = Math.floor(qty);
-  const frac = qty % 1;
-  
-  if (frac === 0.5) {
-    const wholePart = whole > 0 ? `${whole} ` : '';
-    return `${wholePart}<span class="frac"><span>1</span><span class="bottom">2</span></span>`;
-  }
-  
-  return qty.toString();
-}
-
-export function sortLensNames(a: string, b: string): number {
-  const getScores = (name: string) => {
-    const lower = name.toLowerCase();
-    if (lower.startsWith('plano')) return [-1, 0];
-
-    const matches = name.match(/[+-]?\d+\.\d+/g);
-    if (matches) {
-      return matches.map(m => Math.abs(parseFloat(m)));
+  const toggleIgnore = async () => {
+    if (!selectedShop || isDemo) return;
+    setIgnoreLoading(true);
+    if (isIgnored) {
+      await supabase
+        .from('alert_ignores')
+        .delete()
+        .eq('shop_id', selectedShop)
+        .eq('material', material)
+        .eq('vision', vision)
+        .eq('sign', sign)
+        .eq('power_type', powerType)
+        .filter('coatings', 'eq', `{${coatings.join(',')}}`);
+      setIsIgnored(false);
+    } else {
+      await supabase.from('alert_ignores').insert({
+        shop_id: selectedShop,
+        material,
+        vision,
+        sign,
+        power_type: powerType,
+        coatings,
+      });
+      setIsIgnored(true);
     }
-    return [999];
+    setIgnoreLoading(false);
   };
 
-  const scoresA = getScores(a);
-  const scoresB = getScores(b);
+  const handleQuantityChange = (sph: string, cyl: string, axis: number | undefined, add: string | undefined, delta: number) => {
+    const key = `${parseFloat(sph).toFixed(2)}:${parseFloat(cyl).toFixed(2)}:${axis || ''}:${add || ''}`;
+    const currentDelta = deltas[key] || 0;
+    setDeltas({ ...deltas, [key]: currentDelta + delta });
+  };
 
-  for (let i = 0; i < Math.max(scoresA.length, scoresB.length); i++) {
-    const valA = scoresA[i] !== undefined ? scoresA[i] : -1;
-    const valB = scoresB[i] !== undefined ? scoresB[i] : -1;
-    if (valA !== valB) return valA - valB;
-  }
+  const handleAlertQtyChange = (sph: string, cyl: string, axis: number | undefined, add: string | undefined, delta: number) => {
+    const key = `${parseFloat(sph).toFixed(2)}:${parseFloat(cyl).toFixed(2)}:${axis || ''}:${add || ''}`;
+    const origAlertQty = originalAlertQty[key] || 0.00;
+    const currentEdited = editedAlertQtys[key] !== undefined ? editedAlertQtys[key] : origAlertQty;
+    const newAlertQty = Math.max(0, currentEdited + delta);
+    setEditedAlertQtys({ ...editedAlertQtys, [key]: newAlertQty });
+  };
 
-  return a.localeCompare(b);
-}
+  const handleAlertStatusToggle = (sph: string, cyl: string, axis: number | undefined, add: string | undefined) => {
+    const key = `${parseFloat(sph).toFixed(2)}:${parseFloat(cyl).toFixed(2)}:${axis || ''}:${add || ''}`;
+    const origAlertStatus = originalAlertStatus[key] || 'ON';
+    const currentEdited = editedAlertStatuses[key] !== undefined ? editedAlertStatuses[key] : origAlertStatus;
+    const newAlertStatus = currentEdited === 'ON' ? 'OFF' : 'ON';
+    setEditedAlertStatuses({ ...editedAlertStatuses, [key]: newAlertStatus });
+  };
 
-export function parseLensName(name: string): ParsedLens | null {
-  if (!name || typeof name !== 'string') return null;
-  let text = name.trim();
+  const saveStock = async () => {
+    if (isDemo) {
+      showToast('Demo Mode: Stock changes are not saved to the database.', 'info');
+      return;
+    }
 
-  let vision: Vision = 'single vision';
-  if (/\bPrograssive\b/i.test(text)) {
-    vision = 'Prograssive';
-    text = text.replace(/\bPrograssive\b/i, '');
-  } else if (/\bKT\b/i.test(text)) {
-    vision = 'KT';
-    text = text.replace(/\bKT\b/i, '');
-  }
+    const allKeys = Array.from(new Set([
+      ...Object.keys(deltas).filter(k => deltas[k] !== 0),
+      ...Object.keys(editedAlertQtys).filter(k => editedAlertQtys[k] !== originalAlertQty[k]),
+      ...Object.keys(editedAlertStatuses).filter(k => editedAlertStatuses[k] !== originalAlertStatus[k])
+    ]));
 
-  let material: Material = 'CR';
-  if (/\bGlass\b/i.test(text)) {
-    material = 'Glass';
-    text = text.replace(/\bGlass\b/i, '');
-  } else if (/\bPoly\b/i.test(text)) {
-    material = 'Poly';
-    text = text.replace(/\bPoly\b/i, '');
-  }
+    if (allKeys.length === 0) {
+      showToast('No changes were made to save.', 'info');
+      return;
+    }
 
-  let add: string | undefined = undefined;
-  const addMatch = text.match(/\bADD \+?(\d+\.\d+)\b/i);
-  if (addMatch) {
-    add = parseFloat(addMatch[1]).toFixed(2);
-    text = text.replace(addMatch[0], '');
-  }
+    setLoading(true);
+    let updatedCount = 0;
+    let lastError = null;
 
-  let axis: number | undefined = undefined;
-  const axisMatch = text.match(/\bAXIS (\d+)\b/i);
-  if (axisMatch) {
-    axis = parseInt(axisMatch[1], 10);
-    text = text.replace(axisMatch[0], '');
-  }
+    for (const key of allKeys) {
+      const [sphStr, cylStr, axisStr, addStr] = key.split(':');
+      const sph = parseFloat(sphStr);
+      const cyl = parseFloat(cylStr);
+      const axis = axisStr ? parseInt(axisStr) : null;
+      const addition = addStr ? parseFloat(addStr) : null;
 
-  let powerType: PowerType | null = null;
-  let sign: Sign = '-';
-  let sph = '0.00';
-  let cyl = '0.00';
+      const currentQty = originalStock[key] || 0;
+      const delta = deltas[key] || 0;
+      const newQty = Math.max(0, currentQty + delta);
 
-  if (/\bPlano\b/i.test(text)) {
-    powerType = 'SPH';
-    sign = planoSignFor(vision);
-    sph = '0.00';
-    cyl = '0.00';
-    text = text.replace(/\bPlano\b/i, '');
-  } else {
-    const sphMatch = text.match(/([+-])(\d+\.\d+)\s+SPH\b/i);
-    const cylMatch = text.match(/([+-])(\d+\.\d+)\s+CYL\b/i);
-    const compoundMatch = text.match(/([+-])(\d+\.\d+)\/([+-])(\d+\.\d+)/);
+      const alertQty = editedAlertQtys[key] !== undefined ? editedAlertQtys[key] : (originalAlertQty[key] !== undefined ? originalAlertQty[key] : 0.00);
+      const alertStatus = editedAlertStatuses[key] !== undefined ? editedAlertStatuses[key] : (originalAlertStatus[key] !== undefined ? originalAlertStatus[key] : 'ON');
 
-    if (sphMatch) {
-      powerType = 'SPH';
-      sign = sphMatch[1] as Sign;
-      sph = parseFloat(sphMatch[2]).toFixed(2);
-      cyl = '0.00';
-      text = text.replace(sphMatch[0], '');
-    } else if (cylMatch) {
-      powerType = 'CYL';
-      sign = cylMatch[1] as Sign;
-      sph = '0.00';
-      cyl = parseFloat(cylMatch[2]).toFixed(2);
-      text = text.replace(cylMatch[0], '');
-    } else if (compoundMatch) {
-      const s1 = compoundMatch[1] as Sign;
-      const sphVal = parseFloat(compoundMatch[2]).toFixed(2);
-      const s2 = compoundMatch[3] as Sign;
-      const cylVal = parseFloat(compoundMatch[4]).toFixed(2);
+      const update = {
+        shop_id: selectedShop,
+        material,
+        vision,
+        sign,
+        power_type: powerType,
+        sph,
+        cyl,
+        axis,
+        addition,
+        coatings,
+        quantity: newQty,
+        alert_qty: alertQty,
+        alert_status: alertStatus
+      };
 
-      if (s1 === s2) {
-        powerType = 'Compound';
-        sign = s1;
+      const { error } = await supabase.from('lens_stock').upsert(update, {
+        onConflict: 'shop_id, material, vision, sign, power_type, sph, cyl, axis, addition, coatings'
+      });
+      if (error) {
+        console.error('Save error:', error);
+        lastError = error;
       } else {
-        powerType = 'Cross Compound';
-        sign = s1;
+        updatedCount++;
       }
-      sph = sphVal;
-      cyl = cylVal;
-      text = text.replace(compoundMatch[0], '');
     }
-  }
 
-  if (!powerType) return null;
-
-  const knownCoatings = ['Photo Grey', 'Bluecut Dual coat', 'Bluecut Blue', 'Bluecut', 'HMC', 'HC'];
-  const foundCoatings: string[] = [];
-  let coatingText = text.trim();
-
-  for (const c of knownCoatings) {
-    const regex = new RegExp(`\\b${c.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'gi');
-    if (regex.test(coatingText)) {
-      foundCoatings.push(c);
-      coatingText = coatingText.replace(regex, '').trim();
+    setLoading(false);
+    if (updatedCount > 0) {
+      showToast(`Stock updated successfully! (${updatedCount} items)`, 'success');
+      setOriginalStock({});
+      setOriginalAlertQty({});
+      setOriginalAlertStatus({});
+      setDeltas({});
+      setEditedAlertQtys({});
+      setEditedAlertStatuses({});
+      await fetchStock();
+    } else if (lastError) {
+      alert('Failed to save changes. Error: ' + (lastError as any).message);
+    } else {
+      showToast('No changes were applied.', 'info');
     }
-  }
-
-  const extraWords = coatingText.split(/\s+/).filter(Boolean);
-  if (extraWords.length > 0) {
-    foundCoatings.push(extraWords.join(' '));
-  }
-
-  const coatings = foundCoatings.length > 0 ? foundCoatings : ['HC'];
-
-  return {
-    material,
-    vision,
-    sign,
-    powerType,
-    sph,
-    cyl,
-    axis,
-    add,
-    coatings
   };
-}
 
-export async function isStockLens(parsed: ParsedLens | null): Promise<boolean> {
-  if (!parsed) return false;
-  let custom = await fetchCustomLensRows(
-    parsed.material,
-    parsed.vision,
-    parsed.sign,
-    parsed.powerType,
-    parsed.coatings
-  );
-  if (!custom) {
-    custom = generateLensRows(parsed.powerType, parsed.vision, parsed.sign);
-  }
-  custom = filterPlanoRows(custom, parsed.vision, parsed.sign, parsed.powerType);
+  const toggleCoating = (c: string) => {
+    if (c === 'Photo Grey') {
+      if (coatings.includes(c)) { setCoatings(coatings.filter(item => item !== c)); }
+      else { setCoatings([...coatings, c]); }
+    } else {
+      const photoGreySelected = coatings.includes('Photo Grey');
+      setCoatings(photoGreySelected ? ['Photo Grey', c] : [c]);
+    }
+  };
 
-  const sphVal = parseFloat(parsed.sph).toFixed(2);
-  const cylVal = parseFloat(parsed.cyl).toFixed(2);
-  const addVal = parsed.add ? parseFloat(parsed.add).toFixed(2) : undefined;
+  const addCustomCoating = async () => {
+    const res = await addCoating(customCoating);
+    if (!res.ok) { showToast(res.message || 'Coating add nahi hui.', 'error'); return; }
+    const photoGreySelected = coatings.includes('Photo Grey');
+    setCoatings(photoGreySelected ? ['Photo Grey', res.name as string] : [res.name as string]);
+    setCustomCoating('');
+  };
 
-  return custom.some(row => {
-    const rowSph = parseFloat(row.sph).toFixed(2);
-    const rowCyl = parseFloat(row.cyl).toFixed(2);
-    const rowAdd = row.add ? parseFloat(row.add).toFixed(2) : undefined;
-    return rowSph === sphVal && rowCyl === cylVal && rowAdd === addVal;
+  const handleEditToggle = () => {
+    if (isEditMode) {
+      fetchCustomLensRows(material, vision, sign, powerType, coatings).then(custom => {
+        let rows = custom;
+        if (!rows) {
+          rows = generateLensRows(powerType, vision, sign);
+        }
+        rows = filterPlanoRows(rows, vision, sign, powerType);
+        setCustomRows(rows);
+      });
+    }
+    setIsEditMode(!isEditMode);
+    setInsertAt(null);
+    setSelectedRowIndexes(new Set());
+  };
+
+  const handleSaveList = async () => {
+    setLoading(true);
+    try {
+      let oldRows = await fetchCustomLensRows(material, vision, sign, powerType, coatings);
+      if (!oldRows) {
+        oldRows = generateLensRows(powerType, vision, sign);
+      }
+      oldRows = filterPlanoRows(oldRows, vision, sign, powerType);
+      const { success, error } = await saveCustomLensRows(material, vision, sign, powerType, customRows, coatings);
+
+      if (!success) {
+        alert('Failed to save list: ' + (error as any).message);
+        return;
+      }
+
+      const newKeys = new Set(customRows.map(r => `${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
+      const deletedRows = oldRows.filter(r => !newKeys.has(`${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
+
+      if (deletedRows.length > 0) {
+        for (const row of deletedRows) {
+          let deleteQuery = supabase
+            .from('lens_stock')
+            .delete()
+            .eq('material', material)
+            .eq('vision', vision)
+            .eq('sign', sign)
+            .eq('power_type', powerType)
+            .eq('sph', parseFloat(row.sph))
+            .eq('cyl', parseFloat(row.cyl))
+            .filter('coatings', 'eq', `{${coatings.join(',')}}`);
+
+          if (row.add) {
+            deleteQuery = deleteQuery.eq('addition', parseFloat(row.add));
+          } else {
+            deleteQuery = deleteQuery.is('addition', null);
+          }
+
+          const { error: delError } = await deleteQuery;
+          if (delError) console.error('Delete error:', delError);
+        }
+      }
+
+      showToast('List saved successfully!', 'success');
+      setIsEditMode(false);
+    } catch (e) {
+      console.error(e);
+      alert('An error occurred while saving.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleRowSelection = (index: number) => {
+    const newSelection = new Set(selectedRowIndexes);
+    if (newSelection.has(index)) {
+      newSelection.delete(index);
+    } else {
+      newSelection.add(index);
+    }
+    setSelectedRowIndexes(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedRowIndexes.size === customRows.length) {
+      setSelectedRowIndexes(new Set());
+    } else {
+      setSelectedRowIndexes(new Set(customRows.map((_, i) => i)));
+    }
+  };
+
+  const deleteSelectedRows = () => {
+    if (selectedRowIndexes.size === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedRowIndexes.size} selected rows? This will also delete their stock for all shops when you save.`)) return;
+    
+    const newRows = customRows.filter((_, index) => !selectedRowIndexes.has(index));
+    setCustomRows(newRows);
+    setSelectedRowIndexes(new Set());
+  };
+
+  const moveRowUp = (index: number) => {
+    if (index === 0) return;
+    const newRows = [...customRows];
+    const temp = newRows[index - 1];
+    newRows[index - 1] = newRows[index];
+    newRows[index] = temp;
+    setCustomRows(newRows);
+    setSelectedRowIndexes(new Set()); // Reset selection to avoid confusion after move
+  };
+
+  const moveRowDown = (index: number) => {
+    if (index === customRows.length - 1) return;
+    const newRows = [...customRows];
+    const temp = newRows[index + 1];
+    newRows[index + 1] = newRows[index];
+    newRows[index] = temp;
+    setCustomRows(newRows);
+    setSelectedRowIndexes(new Set()); // Reset selection
+  };
+
+  const initiateInsert = (index: number) => {
+    setInsertAt(index);
+    const row = customRows[index];
+    setNewRowPower({ sph: row.sph, cyl: row.cyl, add: row.add || '' });
+  };
+
+  const gestureStateRef = React.useRef<{
+    timer: any;
+    startX: number;
+    startY: number;
+    targetIndex: number | null;
+    isActivated: boolean;
+  }>({
+    timer: null,
+    startX: 0,
+    startY: 0,
+    targetIndex: null,
+    isActivated: false
   });
+
+  const clearLongPressTimer = useCallback(() => {
+    if (gestureStateRef.current.timer) {
+      clearTimeout(gestureStateRef.current.timer);
+      gestureStateRef.current.timer = null;
+    }
+    gestureStateRef.current.targetIndex = null;
+  }, []);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      clearLongPressTimer();
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      clearLongPressTimer();
+    };
+  }, [clearLongPressTimer]);
+
+  const handleRowPointerDown = (e: React.PointerEvent, index: number) => {
+    if (!isEditMode) return;
+    // Only respond to primary mouse button or touch
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+    clearLongPressTimer();
+    gestureStateRef.current.isActivated = false;
+    gestureStateRef.current.startX = e.clientX;
+    gestureStateRef.current.startY = e.clientY;
+    gestureStateRef.current.targetIndex = index;
+
+    gestureStateRef.current.timer = setTimeout(() => {
+      if (gestureStateRef.current.targetIndex === index) {
+        gestureStateRef.current.isActivated = true;
+        initiateInsert(index);
+      }
+      gestureStateRef.current.timer = null;
+    }, 550);
+  };
+
+  const handleRowPointerMove = (e: React.PointerEvent) => {
+    if (!gestureStateRef.current.timer) return;
+    const deltaX = Math.abs(e.clientX - gestureStateRef.current.startX);
+    const deltaY = Math.abs(e.clientY - gestureStateRef.current.startY);
+    // If movement exceeds 10px, cancel hold
+    if (deltaX > 10 || deltaY > 10) {
+      clearLongPressTimer();
+    }
+  };
+
+  const handleRowPointerUp = () => {
+    clearLongPressTimer();
+  };
+
+  const handleRowPointerCancel = () => {
+    clearLongPressTimer();
+  };
+
+  const confirmInsert = () => {
+    if (insertAt === null) return;
+    const sph = parseFloat(newRowPower.sph);
+    const cyl = parseFloat(newRowPower.cyl);
+    const add = newRowPower.add ? parseFloat(newRowPower.add) : undefined;
+    if (isNaN(sph) || isNaN(cyl)) { alert('Please enter valid SPH and CYL numbers.'); return; }
+    if ((vision === 'KT' || vision === 'Prograssive') && (add === undefined || isNaN(add))) { alert('Please enter a valid ADD number.'); return; }
+
+    const sphFixed = sph.toFixed(2);
+    const cylFixed = cyl.toFixed(2);
+    const addFixed = add !== undefined ? add.toFixed(2) : undefined;
+
+    // Check if this power entry already exists in the list
+    const isDuplicate = customRows.some(row => {
+      const rowSph = parseFloat(row.sph).toFixed(2);
+      const rowCyl = parseFloat(row.cyl).toFixed(2);
+      const rowAdd = row.add !== undefined && row.add !== '' ? parseFloat(row.add).toFixed(2) : undefined;
+      return rowSph === sphFixed && rowCyl === cylFixed && rowAdd === addFixed;
+    });
+
+    if (isDuplicate) {
+      alert('Yeh power list mein pehle se maujood hai! Ek power ki entry sirf ek bar hi ho sakti hai.');
+      return;
+    }
+
+    const newRows = [...customRows];
+    newRows.splice(insertAt, 0, {
+      sph: sphFixed,
+      cyl: cylFixed,
+      add: addFixed
+    });
+    setCustomRows(newRows);
+    setInsertAt(null);
+    setSelectedRowIndexes(new Set());
+  };
+
+  return (
+    <div className="space-y-4 pb-20">
+      <div className="sticky top-[137px] sm:top-16 z-40 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm -mx-4 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shadow-sm">
+        <h1 className="text-sm font-bold text-gray-900 dark:text-white truncate">Stock {isEditMode ? '(Edit Mode)' : ''}</h1>
+        <div className="flex gap-2">
+          {!isEditMode ? (
+            <>
+              {!isDemo && (
+                <button
+                  onClick={toggleIgnore}
+                  disabled={ignoreLoading || !selectedShop}
+                  title={isIgnored ? 'Is list ko dobara alert mein dikhao' : 'Is list ko low stock alert mein ignore karo'}
+                  className={`px-3 py-1.5 rounded-md flex items-center text-[10px] sm:text-xs transition-colors disabled:opacity-50 border ${
+                    isIgnored
+                      ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-300 dark:border-orange-700 hover:bg-orange-100'
+                      : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {isIgnored
+                    ? <><BellOff className="w-3.5 h-3.5 mr-1" /> Ignored</>
+                    : <><Bell className="w-3.5 h-3.5 mr-1" /> Ignore Alert</>
+                  }
+                </button>
+              )}
+              <button onClick={handleEditToggle} className="bg-indigo-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-indigo-700 text-[10px] sm:text-xs transition-colors">
+                <Edit2 className="w-3.5 h-3.5 mr-1" /> Edit List
+              </button>
+              <button onClick={saveStock} disabled={loading} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-green-700 disabled:opacity-50 text-[10px] sm:text-xs transition-colors shadow-sm">
+                <Save className="w-3.5 h-3.5 mr-1" /> Save changes
+              </button>
+            </>
+          ) : (
+            <>
+              {selectedRowIndexes.size > 0 && (
+                <button onClick={deleteSelectedRows} className="bg-red-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-red-700 text-[10px] sm:text-xs transition-colors shadow-sm animate-in fade-in zoom-in duration-200">
+                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete ({selectedRowIndexes.size})
+                </button>
+              )}
+              <button onClick={handleEditToggle} className="bg-gray-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-gray-700 text-[10px] sm:text-xs transition-colors">
+                <X className="w-3.5 h-3.5 mr-1" /> Cancel
+              </button>
+              <button onClick={handleSaveList} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-green-700 text-[10px] sm:text-xs transition-colors shadow-sm">
+                <Check className="w-3.5 h-3.5 mr-1" /> Save List
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm space-y-3 border border-gray-200 dark:border-gray-700">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Material</label>
+            <div className="flex gap-1.5">
+              {MATERIALS.map(m => (
+                <button key={m} onClick={() => setMaterial(m)} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${material === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{m}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Vision</label>
+            <div className="flex gap-1.5">
+              {VISIONS.map(v => (
+                <button key={v} type="button" onClick={() => { setVision(v); setRowAxes({}); }} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${vision === v ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{VISION_LABELS[v]}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <div className="md:col-span-1">
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Power Type</label>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {['SPH', 'CYL', 'Compound', 'Cross Compound'].map((type) => (
+                <button key={type} onClick={() => setPowerType(type as PowerType)} className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}>{type}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sign</label>
+            <div className="flex gap-1.5 mt-1">
+              <button onClick={() => setSign('+')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '+' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>+</button>
+              <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Coatings</label>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {availableCoatings.map(c => (
+                <div key={c} className="relative inline-flex items-center">
+                  <button
+                    onClick={() => toggleCoating(c)}
+                    className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${
+                      coatings.includes(c)
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'
+                    }`}
+                  >
+                    {c}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5 ml-auto">
+              <input type="text" value={customCoating} onChange={(e) => setCustomCoating(e.target.value)} placeholder="Add coating..." className="text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-md px-2 py-1 w-24 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all" />
+              <button onClick={addCustomCoating} className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 p-1 rounded-md hover:bg-indigo-200 dark:hover:bg-indigo-900/60 transition-colors"><Plus className="w-3.5 h-3.5" /></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
+        <div className="overflow-x-auto">
+          <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-800/80 text-center">
+              <tr>
+                {isEditMode && (
+                  <th className="px-2 py-1.5 w-10">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      checked={selectedRowIndexes.size === customRows.length && customRows.length > 0}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                )}
+                {isEditMode && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Move</th>}
+                <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-48">Description</th>
+                {showAxis && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Axis</th>}
+                <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Stock</th>
+                {!isEditMode ? (
+                  <>
+                    <th className="px-1 py-1.5 text-center text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-40">Update</th>
+                    <th className="px-1 py-1.5 text-center text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-40">Alert Qty</th>
+                    <th className="px-1 py-1.5 text-center text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-24">Alert Status</th>
+                  </>
+                ) : (
+                  <th className="px-2 py-1.5 text-right text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-20">Actions</th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              {lensRows.map((row, index) => {
+                const rowKey = `${row.sph}-${row.cyl}-${row.add || ''}-${index}`;
+                const rowAxis = rowAxes[rowKey];
+                const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, rowAxis, row.add);
+                const key = `${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}:${rowAxis || ''}:${row.add || ''}`;
+                const delta = deltas[key] || 0;
+                const origQty = originalStock[key] || 0;
+
+                const alertQty = editedAlertQtys[key] !== undefined ? editedAlertQtys[key] : (originalAlertQty[key] !== undefined ? originalAlertQty[key] : 0.00);
+                const alertStatus = editedAlertStatuses[key] !== undefined ? editedAlertStatuses[key] : (originalAlertStatus[key] !== undefined ? originalAlertStatus[key] : 'ON');
+
+                const isInsertMode = insertAt === index;
+                const isSelected = selectedRowIndexes.has(index);
+
+                return (
+                  <React.Fragment key={rowKey}>
+                    {isInsertMode && (
+                      <tr className="bg-yellow-50 dark:bg-yellow-900/20">
+                        <td colSpan={showAxis ? 6 : 5} className="p-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input type="number" step="0.25" placeholder="SPH" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.sph} onChange={(e) => setNewRowPower({ ...newRowPower, sph: e.target.value })} />
+                            <input type="number" step="0.25" placeholder="CYL" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.cyl} onChange={(e) => setNewRowPower({ ...newRowPower, cyl: e.target.value })} />
+                            {(vision === 'KT' || vision === 'Prograssive') && (
+                              <input type="number" step="0.25" placeholder="ADD" className="w-16 text-[10px] p-1 border rounded dark:bg-gray-900 dark:border-gray-700" value={newRowPower.add} onChange={(e) => setNewRowPower({ ...newRowPower, add: e.target.value })} />
+                            )}
+                            <button onClick={confirmInsert} className="bg-green-600 text-white p-1 rounded"><Check className="w-4 h-4" /></button>
+                            <button onClick={() => setInsertAt(null)} className="bg-red-600 text-white p-1 rounded"><X className="w-4 h-4" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                      <tr
+                      onContextMenu={(e) => { if (isEditMode) { e.preventDefault(); initiateInsert(index); } }}
+                      onPointerDown={(e) => handleRowPointerDown(e, index)}
+                      onPointerMove={handleRowPointerMove}
+                      onPointerUp={handleRowPointerUp}
+                      onPointerCancel={handleRowPointerCancel}
+                      className={`hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50 ${isEditMode ? 'cursor-pointer select-none' : ''} ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20' : ''}`}
+                      onClick={() => {
+                        if (isEditMode && !gestureStateRef.current.isActivated) {
+                          toggleRowSelection(index);
+                        }
+                      }}
+                    >
+                      {isEditMode && (
+                        <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input 
+                            type="checkbox" 
+                            className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            checked={isSelected}
+                            onChange={() => toggleRowSelection(index)}
+                          />
+                        </td>
+                      )}
+                      {isEditMode && (
+                        <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <button onClick={() => moveRowUp(index)} disabled={index === 0} className={`p-0.5 rounded transition-colors ${index === 0 ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}>
+                              <ChevronUp className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => moveRowDown(index)} disabled={index === customRows.length - 1} className={`p-0.5 rounded transition-colors ${index === customRows.length - 1 ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'}`}>
+                              <ChevronDown className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                        <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300 select-none w-48">
+                        {isEditMode && <span className="mr-2 text-gray-400">☰</span>}
+                        {name}
+                      </td>
+                      {showAxis && (
+                        <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                          <select disabled={isEditMode} value={rowAxis || ''} onChange={(e) => setRowAxes({ ...rowAxes, [rowKey]: parseInt(e.target.value) })} className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-[10px] p-0.5 w-14 disabled:opacity-50">
+                            <option value="">-</option>
+                            {(vision === 'KT' ? KT_AXIS : PROGRESSIVE_AXIS).map(a => <option key={a} value={a}>{a}</option>)}
+                          </select>
+                        </td>
+                      )}
+                      <td className="px-1 py-1.5 whitespace-nowrap text-[12px] font-semibold text-center text-gray-800 dark:text-gray-200">{origQty.toFixed(2)}</td>
+
+                      {!isEditMode ? (
+                        <>
+                          {/* Update Column */}
+                          <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button onClick={(e) => { e.stopPropagation(); handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, -0.5); }} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Minus className="w-6 h-6" /></button>
+                              <span className={`w-12 text-center text-[12px] font-bold ${
+                                delta > 0
+                                  ? 'text-green-700 dark:text-green-300'
+                                  : delta < 0
+                                    ? 'text-red-700 dark:text-red-300'
+                                    : 'text-gray-800 dark:text-gray-200'
+                              }`}>
+                                {delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}
+                              </span>
+                              <button onClick={(e) => { e.stopPropagation(); handleQuantityChange(row.sph, row.cyl, rowAxis, row.add, 0.5); }} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"><Plus className="w-6 h-6" /></button>
+                            </div>
+                          </td>
+
+                          {/* Alert Qty Column */}
+                          <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button onClick={(e) => { e.stopPropagation(); handleAlertQtyChange(row.sph, row.cyl, rowAxis, row.add, -0.5); }} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"><Minus className="w-6 h-6" /></button>
+                              <span className="w-12 text-center text-[10px] font-semibold text-gray-700 dark:text-gray-300">
+                                {alertQty.toFixed(2)}
+                              </span>
+                              <button onClick={(e) => { e.stopPropagation(); handleAlertQtyChange(row.sph, row.cyl, rowAxis, row.add, 0.5); }} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"><Plus className="w-6 h-6" /></button>
+                            </div>
+                          </td>
+
+                          {/* Alert Status Column */}
+                          <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleAlertStatusToggle(row.sph, row.cyl, rowAxis, row.add); }}
+                              className={`px-3 py-1.5 rounded-md text-xs font-black transition-colors ${
+                                alertStatus === 'ON'
+                                  ? 'text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                  : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                              }`}
+                            >
+                              {alertStatus}
+                            </button>
+                          </td>
+                        </>
+                      ) : (
+                        <td className="px-2 py-1.5 whitespace-nowrap text-right">
+                          <div className="flex justify-end gap-1 text-[10px] text-gray-400 italic">
+                            Select to delete
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
 }

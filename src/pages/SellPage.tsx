@@ -9,6 +9,8 @@ import {
   getDefaultAxis,
   MATERIALS,
   VISIONS,
+  VISION_LABELS,
+  filterPlanoRows,
   formatLensName,
   Material,
   Vision,
@@ -16,7 +18,8 @@ import {
   Sign,
   KT_AXIS,
   PROGRESSIVE_AXIS,
-  Shop
+  Shop,
+  normalizePlanoSign
 } from '../utils/lensUtils';
 import { Plus, Tag, X, Edit2, Trash2, Check, Loader2 } from 'lucide-react';
 
@@ -89,7 +92,7 @@ function lookupFromRecord(r: SaleRecord): StockLookup {
     shop_id: r.shop_id,
     material: r.material || '',
     vision: r.vision || '',
-    sign: r.sign || null,
+    sign: normalizePlanoSign(r.vision || '', r.power_type || '', Number(r.sph), r.sign || null),
     power_type: r.power_type || '',
     sph: Number(r.sph),
     cyl: Number(r.cyl),
@@ -144,9 +147,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
       if (!custom) {
         custom = generateLensRows(powerType, vision, sign);
       }
-      if (sign === '+' && powerType === 'SPH') {
-        custom = custom.filter(row => parseFloat(row.sph) !== 0);
-      }
+      custom = filterPlanoRows(custom, vision, sign, powerType);
       setCustomRows(custom);
       setLoading(false);
     }
@@ -509,10 +510,11 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Vision</label>
-            <select value={vision} onChange={(e) => { setVision(e.target.value as Vision); setRowAxes({}); }}
-              className="block w-full rounded-md border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-1.5 border text-[10px]">
-              {VISIONS.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
+            <div className="flex gap-1.5">
+              {VISIONS.map(v => (
+                <button key={v} type="button" onClick={() => { setVision(v); setRowAxes({}); }} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${vision === v ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{VISION_LABELS[v]}</button>
+              ))}
+            </div>
           </div>
         </div>
 

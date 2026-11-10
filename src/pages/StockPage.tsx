@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/Toast';
 import { useCoatings } from '../utils/coatingSync';
+import { useUnsavedGuard, useUnsavedChanges } from '../components/UnsavedChanges';
 import {
   generateLensRows,
   getDefaultAxis,
@@ -56,6 +57,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   const [newRowPower, setNewRowPower] = useState({ sph: '', cyl: '', add: '' });
   const [insertAt, setInsertAt] = useState<number | null>(null);
   const [isIgnored, setIsIgnored] = useState(false);
+  const [editSnapshot, setEditSnapshot] = useState<string | null>(null);
   const [ignoreLoading, setIgnoreLoading] = useState(false);
 
   useEffect(() => {
@@ -240,10 +242,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     setEditedAlertStatuses({ ...editedAlertStatuses, [key]: newAlertStatus });
   };
 
-  const saveStock = async () => {
+  const saveStock = async (): Promise<boolean> => {
     if (isDemo) {
       showToast('Demo Mode: Stock changes are not saved to the database.', 'info');
-      return;
+      return false;
     }
 
     const allKeys = Array.from(new Set([
@@ -254,7 +256,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
     if (allKeys.length === 0) {
       showToast('No changes were made to save.', 'info');
-      return;
+      return true;
     }
 
     setLoading(true);
@@ -312,10 +314,13 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
       setEditedAlertQtys({});
       setEditedAlertStatuses({});
       await fetchStock();
+      return lastError === null;
     } else if (lastError) {
       alert('Failed to save changes. Error: ' + (lastError as any).message);
+      return false;
     } else {
       showToast('No changes were applied.', 'info');
+      return false;
     }
   };
 
@@ -338,6 +343,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
   };
 
   const handleEditToggle = () => {
+    if (!isEditMode) setEditSnapshot(JSON.stringify(customRows));
     if (isEditMode) {
       fetchCustomLensRows(material, vision, sign, powerType, coatings).then(custom => {
         let rows = custom;
@@ -353,7 +359,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     setSelectedRowIndexes(new Set());
   };
 
-  const handleSaveList = async () => {
+  const handleSaveList = async (): Promise<boolean> => {
     setLoading(true);
     try {
       let oldRows = await fetchCustomLensRows(material, vision, sign, powerType, coatings);
@@ -365,7 +371,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
       if (!success) {
         alert('Failed to save list: ' + (error as any).message);
-        return;
+        return false;
       }
 
       const newKeys = new Set(customRows.map(r => `${parseFloat(r.sph).toFixed(2)}:${parseFloat(r.cyl).toFixed(2)}:${r.add ? parseFloat(r.add).toFixed(2) : ''}`));
@@ -397,9 +403,11 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
 
       showToast('List saved successfully!', 'success');
       setIsEditMode(false);
+      return true;
     } catch (e) {
       console.error(e);
       alert('An error occurred while saving.');
+      return false;
     } finally {
       setLoading(false);
     }
@@ -565,6 +573,24 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
     setSelectedRowIndexes(new Set());
   };
 
+  // Unsaved changes: quantity / alert qty / alert status, ya Edit List me list ka badlav
+  const hasStockChanges =
+    Object.keys(deltas).some(k => deltas[k] !== 0) ||
+    Object.keys(editedAlertQtys).some(k => editedAlertQtys[k] !== originalAlertQty[k]) ||
+    Object.keys(editedAlertStatuses).some(k => editedAlertStatuses[k] !== originalAlertStatus[k]);
+  const hasListChanges = isEditMode && editSnapshot !== null && JSON.stringify(customRows) !== editSnapshot;
+  const isDirty = isEditMode ? hasListChanges : hasStockChanges;
+
+  const { confirmLeave } = useUnsavedChanges();
+  useUnsavedGuard(
+    isDirty,
+    () => (isEditMode ? handleSaveList() : saveStock()),
+    () => {
+      if (isEditMode) handleEditToggle();
+      else { setDeltas({}); setEditedAlertQtys({}); setEditedAlertStatuses({}); }
+    }
+  );
+
   return (
     <div className="space-y-4 pb-20">
       <div className="sticky top-[137px] sm:top-16 z-40 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm -mx-4 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shadow-sm">
@@ -589,10 +615,10 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
                   }
                 </button>
               )}
-              <button onClick={handleEditToggle} className="bg-indigo-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-indigo-700 text-[10px] sm:text-xs transition-colors">
+              <button onClick={() => confirmLeave(handleEditToggle)} className="bg-indigo-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-indigo-700 text-[10px] sm:text-xs transition-colors">
                 <Edit2 className="w-3.5 h-3.5 mr-1" /> Edit List
               </button>
-              <button onClick={saveStock} disabled={loading} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-green-700 disabled:opacity-50 text-[10px] sm:text-xs transition-colors shadow-sm">
+              <button onClick={saveStock} disabled={loading || !hasStockChanges} className={`px-3 py-1.5 rounded-md flex items-center text-[10px] sm:text-xs transition-colors ${hasStockChanges ? 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 shadow-sm' : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'}`}>
                 <Save className="w-3.5 h-3.5 mr-1" /> Save changes
               </button>
             </>
@@ -606,7 +632,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
               <button onClick={handleEditToggle} className="bg-gray-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-gray-700 text-[10px] sm:text-xs transition-colors">
                 <X className="w-3.5 h-3.5 mr-1" /> Cancel
               </button>
-              <button onClick={handleSaveList} className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-green-700 text-[10px] sm:text-xs transition-colors shadow-sm">
+              <button onClick={handleSaveList} disabled={loading || !hasListChanges} className={`px-3 py-1.5 rounded-md flex items-center text-[10px] sm:text-xs transition-colors ${hasListChanges ? 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 shadow-sm' : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'}`}>
                 <Check className="w-3.5 h-3.5 mr-1" /> Save List
               </button>
             </>
@@ -620,7 +646,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Material</label>
             <div className="flex gap-1.5">
               {MATERIALS.map(m => (
-                <button key={m} onClick={() => setMaterial(m)} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${material === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{m}</button>
+                <button key={m} onClick={() => confirmLeave(() => setMaterial(m))} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${material === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{m}</button>
               ))}
             </div>
           </div>
@@ -628,7 +654,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Vision</label>
             <div className="flex gap-1.5">
               {VISIONS.map(v => (
-                <button key={v} type="button" onClick={() => { setVision(v); setRowAxes({}); }} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${vision === v ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{VISION_LABELS[v]}</button>
+                <button key={v} type="button" onClick={() => confirmLeave(() => { setVision(v); setRowAxes({}); })} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${vision === v ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{VISION_LABELS[v]}</button>
               ))}
             </div>
           </div>
@@ -639,15 +665,15 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Power Type</label>
             <div className="flex flex-wrap gap-1 mt-1">
               {['SPH', 'CYL', 'Compound', 'Cross Compound'].map((type) => (
-                <button key={type} onClick={() => setPowerType(type as PowerType)} className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}>{type}</button>
+                <button key={type} onClick={() => confirmLeave(() => setPowerType(type as PowerType))} className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}>{type}</button>
               ))}
             </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sign</label>
             <div className="flex gap-1.5 mt-1">
-              <button onClick={() => setSign('+')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '+' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>+</button>
-              <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
+              <button onClick={() => confirmLeave(() => setSign('+'))} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '+' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>+</button>
+              <button onClick={() => confirmLeave(() => setSign('-'))} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
             </div>
           </div>
         </div>
@@ -659,7 +685,7 @@ export default function StockPage({ isDemo = false }: { isDemo?: boolean }) {
               {availableCoatings.map(c => (
                 <div key={c} className="relative inline-flex items-center">
                   <button
-                    onClick={() => toggleCoating(c)}
+                    onClick={() => confirmLeave(() => toggleCoating(c))}
                     className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${
                       coatings.includes(c)
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'

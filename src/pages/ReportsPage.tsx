@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { Shop, formatReportQty, sortLensNames } from '../utils/lensUtils';
-import { FileText, ChevronRight, ChevronLeft, ShoppingCart, Tag, Layers, Database, Download, Upload, Loader2 } from 'lucide-react';
+import { FileText, ChevronRight, ChevronLeft, ShoppingCart, Tag, Layers, Database, Download, Upload, Loader2, Clock } from 'lucide-react';
 import { showToast } from '../components/Toast';
 import {
   TABLES, LAST_BACKUP_KEY, MAX_BACKUP_FILE_BYTES, RestoreError, buildBackup, downloadBackup, parseBackup,
@@ -280,6 +280,307 @@ function BackupSection({ isDemo }: { isDemo: boolean }) {
   );
 }
 
+// ================= SALE REPORT (date + time wise, date range ke saath) =================
+type SalePreset = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'all' | 'custom';
+interface SaleRow { id: string; name: string; qty: number; created_at: string; }
+
+const SALE_PRESETS: { key: SalePreset; label: string }[] = [
+  { key: 'today', label: 'Aaj' },
+  { key: 'yesterday', label: 'Kal' },
+  { key: '7d', label: 'Last 7 din' },
+  { key: '30d', label: 'Last 30 din' },
+  { key: 'month', label: 'Is mahine' },
+  { key: 'all', label: 'Sab (All time)' },
+];
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+// Local (phone/computer ki) date, UTC nahi, taaki raat ki sale galat date me na jaye.
+const toYmd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+function presetRange(key: SalePreset): { start: string; end: string } {
+  const now = new Date();
+  const today = toYmd(now);
+  const shift = (days: number) => { const d = new Date(now); d.setDate(d.getDate() + days); return toYmd(d); };
+  switch (key) {
+    case 'today': return { start: today, end: today };
+    case 'yesterday': return { start: shift(-1), end: shift(-1) };
+    case '7d': return { start: shift(-6), end: today };
+    case '30d': return { start: shift(-29), end: today };
+    case 'month': return { start: `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-01`, end: today };
+    default: return { start: '', end: '' };
+  }
+}
+
+const fmtDay = (ymd: string) =>
+  new Date(`${ymd}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+const fmtShortDay = (ymd: string) =>
+  new Date(`${ymd}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+const fmtTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase();
+
+function rangeLabel(start: string, end: string) {
+  if (!start && !end) return 'All time';
+  if (start === end) return fmtShortDay(start);
+  return `${fmtShortDay(start)} to ${fmtShortDay(end)}`;
+}
+
+const escHtml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const plainQty = (q: number) => (q % 1 === 0.5 ? `${Math.floor(q) > 0 ? Math.floor(q) + ' ' : ''}½` : String(q));
+
+async function fetchSaleRows(shopId: string, start: string, end: string): Promise<SaleRow[]> {
+  const out: SaleRow[] = [];
+  const size = 1000; // Supabase ek baar me 1000 rows hi deta hai, isliye page-by-page
+  for (let from = 0; ; from += size) {
+    let q: any = supabase.from('sales').select('id, lens_details, quantity, created_at').eq('shop_id', shopId);
+    if (start) q = q.gte('created_at', new Date(`${start}T00:00:00`).toISOString());
+    if (end) q = q.lte('created_at', new Date(`${end}T23:59:59.999`).toISOString());
+    const { data, error } = await q.order('created_at', { ascending: false }).order('id').range(from, from + size - 1);
+    if (error) throw error;
+    (data || []).forEach((r: any) => out.push({
+      id: r.id, name: r.lens_details?.name || '(naam nahi)', qty: Number(r.quantity) || 0, created_at: r.created_at,
+    }));
+    if (!data || data.length < size) break;
+  }
+  return out;
+}
+
+function demoSaleRows(): SaleRow[] {
+  const mk = (daysAgo: number, h: number, m: number, name: string, qty: number, id: string): SaleRow => {
+    const d = new Date(); d.setDate(d.getDate() - daysAgo); d.setHours(h, m, 0, 0);
+    return { id, name, qty, created_at: d.toISOString() };
+  };
+  return [
+    mk(0, 14, 15, '-0.25 SPH HC', 1, 'd1'), mk(0, 11, 40, '-0.50 SPH Bluecut', 0.5, 'd2'),
+    mk(1, 17, 5, 'Plano HC', 1, 'd3'), mk(1, 10, 20, '+1.00 SPH HC', 0.5, 'd4'),
+    mk(3, 12, 0, '-1.00/-0.50 HC', 1, 'd5'),
+  ];
+}
+
+type SaleGroup = { date: string; list: SaleRow[]; total: number };
+
+function openSalePrintWindow(title: string, label: string, groups: SaleGroup[], totalQty: number, count: number) {
+  const win = window.open('', '_blank');
+  if (!win) return;
+  const days = groups.map(g => `
+    <div class="day">
+      <div class="day-head"><span>${escHtml(fmtDay(g.date))}</span><span>${plainQty(g.total)} pairs &middot; ${g.list.length} sales</span></div>
+      <table><tbody>
+        ${g.list.map(r => `<tr><td class="time">${escHtml(fmtTime(r.created_at))}</td><td>${escHtml(r.name)}</td><td class="qty-col">${formatReportQty(r.qty)}</td></tr>`).join('')}
+      </tbody></table>
+    </div>`).join('');
+  const fileName = `${title.replace(/\s+/g, '_')}_${label.replace(/[^\w]+/g, '-')}`;
+  win.document.write(`
+    <html>
+      <head>
+        <title>${escHtml(title)} - ${escHtml(label)}</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+        <style>
+          @page { size: A4; margin: 0; }
+          * { box-sizing: border-box; }
+          body { font-family: 'Courier New', Courier, monospace; font-size: 11px; margin: 0; padding: 0; background: white; }
+          .controls { padding: 8px 16px; display: flex; gap: 10px; justify-content: center; background: white; border-bottom: 1px solid #eee; }
+          .btn { background: #4f46e5; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; }
+          .btn:hover { background: #4338ca; }
+          .page-container { background: white; width: 794px; min-height: 1123px; padding: 10mm; margin: 0 auto; }
+          .header { border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 16px; text-align: center; font-weight: bold; font-size: 16px; }
+          .subheader { font-size: 12px; color: #555; margin-top: 4px; font-weight: normal; }
+          .day { margin-bottom: 14px; page-break-inside: avoid; }
+          .day-head { display: flex; justify-content: space-between; background: #eef2ff; border: 1px solid #c7d2fe; padding: 5px 8px; font-weight: bold; }
+          table { width: 100%; border-collapse: collapse; }
+          td { border: 1px solid #ccc; padding: 5px 8px; text-align: left; }
+          .time { width: 80px; color: #555; white-space: nowrap; }
+          .qty-col { width: 50px; text-align: center; font-weight: bold; }
+          .frac { display: inline-block; vertical-align: middle; text-align: center; font-size: 0.8em; line-height: 1; margin-left: 2px; }
+          .frac span { display: block; padding: 0 2px; }
+          .frac span.bottom { border-top: 1px solid black; }
+          @media print { .controls { display: none; } body { background: white; } }
+        </style>
+      </head>
+      <body>
+        <div class="controls">
+          <button class="btn" onclick="window.print()">Print / Save PDF</button>
+          <button class="btn" onclick="downloadJPG()">Download JPG</button>
+        </div>
+        <div id="capture" class="page-container">
+          <div class="header">
+            ${escHtml(title)}
+            <div class="subheader">DATE: ${escHtml(label)} &nbsp;|&nbsp; TOTAL: ${plainQty(totalQty)} pairs, ${count} sales</div>
+          </div>
+          ${days || '<p>Koi sale nahi mili.</p>'}
+        </div>
+        <script>
+          function downloadJPG() {
+            const btn = document.querySelector('button[onclick="downloadJPG()"]');
+            if (btn) { btn.disabled = true; btn.innerText = 'Generating...'; }
+            html2canvas(document.querySelector("#capture"), { scale: 2 }).then(canvas => {
+              const link = document.createElement('a');
+              link.download = ${JSON.stringify(fileName)} + '.jpg';
+              link.href = canvas.toDataURL('image/jpeg', 0.9);
+              link.click();
+              if (btn) { btn.disabled = false; btn.innerText = 'Download JPG'; }
+            });
+          }
+        </script>
+      </body>
+    </html>
+  `);
+  win.document.close();
+}
+
+function SaleReportView({ shop, isDemo }: { shop: Shop; isDemo: boolean }) {
+  const [preset, setPreset] = useState<SalePreset>('7d');
+  const [range, setRange] = useState(() => presetRange('7d'));
+  const [fromInput, setFromInput] = useState(() => presetRange('7d').start);
+  const [toInput, setToInput] = useState(() => presetRange('7d').end);
+  const [rows, setRows] = useState<SaleRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const reqId = useRef(0);
+
+  useEffect(() => {
+    const myId = ++reqId.current;
+    setLoading(true);
+    setError('');
+    (async () => {
+      try {
+        let data: SaleRow[];
+        if (isDemo) {
+          const startMs = range.start ? new Date(`${range.start}T00:00:00`).getTime() : -Infinity;
+          const endMs = range.end ? new Date(`${range.end}T23:59:59.999`).getTime() : Infinity;
+          data = demoSaleRows().filter(r => { const t = new Date(r.created_at).getTime(); return t >= startMs && t <= endMs; });
+        } else {
+          data = await fetchSaleRows(shop.id, range.start, range.end);
+        }
+        if (myId === reqId.current) setRows(data);
+      } catch (e: any) {
+        if (myId === reqId.current) { setRows([]); setError(e?.message || 'Sale report load nahi hui.'); }
+      } finally {
+        if (myId === reqId.current) setLoading(false);
+      }
+    })();
+  }, [shop.id, isDemo, range.start, range.end]);
+
+  const applyPreset = (key: SalePreset) => {
+    const r = presetRange(key);
+    setPreset(key);
+    setRange(r);
+    setFromInput(r.start);
+    setToInput(r.end);
+  };
+
+  const applyCustom = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fromInput || !toInput) { showToast('From aur To dono date chuno.', 'info'); return; }
+    if (fromInput > toInput) { showToast('From date, To date se baad ki nahi ho sakti.', 'info'); return; }
+    setPreset('custom');
+    setRange({ start: fromInput, end: toInput });
+  };
+
+  const groups: SaleGroup[] = useMemo(() => {
+    const map = new Map<string, SaleRow[]>();
+    rows.forEach(r => {
+      const k = toYmd(new Date(r.created_at));
+      const list = map.get(k);
+      if (list) list.push(r); else map.set(k, [r]);
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([date, list]) => {
+        const sorted = [...list].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        return { date, list: sorted, total: sorted.reduce((sum, r) => sum + r.qty, 0) };
+      });
+  }, [rows]);
+
+  const totalQty = rows.reduce((sum, r) => sum + r.qty, 0);
+  const label = rangeLabel(range.start, range.end);
+  const title = `${shop.name} — Sale Report`;
+
+  return (
+    <div className="space-y-4">
+      {/* Date range chunao */}
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-3">
+        <div className="flex flex-wrap gap-1.5">
+          {SALE_PRESETS.map(p => (
+            <button key={p.key} type="button" onClick={() => applyPreset(p.key)}
+              className={`px-3 py-1.5 rounded-full border text-[11px] font-semibold transition-colors ${preset === p.key
+                ? 'bg-indigo-600 text-white border-indigo-600'
+                : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <form onSubmit={applyCustom} className="flex flex-col sm:flex-row items-end gap-3">
+          <div className="w-full sm:w-auto flex-1">
+            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">From Date</label>
+            <input type="date" value={fromInput} onChange={(e) => setFromInput(e.target.value)}
+              className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+          </div>
+          <div className="w-full sm:w-auto flex-1">
+            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">To Date</label>
+            <input type="date" value={toInput} onChange={(e) => setToInput(e.target.value)}
+              className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+          </div>
+          <button type="submit"
+            className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors">
+            Show Sale
+          </button>
+        </form>
+      </div>
+
+      {/* Heading + summary + print */}
+      <div className="flex flex-wrap justify-between items-center gap-2">
+        <div>
+          <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300">{title}</h2>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+            {label}
+            {!loading && !error && <> &middot; <span className="font-semibold text-gray-700 dark:text-gray-200">{plainQty(totalQty)} pairs</span> &middot; {rows.length} sales</>}
+          </p>
+        </div>
+        <button onClick={() => openSalePrintWindow(title, label, groups, totalQty, rows.length)} disabled={loading || rows.length === 0}
+          className="flex items-center text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-md transition-colors">
+          <FileText className="w-3.5 h-3.5 mr-1" /> Print / Download
+        </button>
+      </div>
+
+      {error && <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">{error}</div>}
+
+      {loading ? (
+        <div className="text-center text-sm text-gray-400 py-10">Loading...</div>
+      ) : rows.length === 0 && !error ? (
+        <div className="text-center text-sm text-gray-400 py-10">Is date range me koi sale nahi mili.</div>
+      ) : (
+        <div className="space-y-4">
+          {groups.map(g => (
+            <div key={g.date} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <div className="flex justify-between items-center px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-100 dark:border-indigo-900/40">
+                <span className="text-xs font-bold text-indigo-800 dark:text-indigo-200">{fmtDay(g.date)}</span>
+                <span className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">
+                  <span dangerouslySetInnerHTML={{ __html: formatReportQty(g.total) }} /> pairs &middot; {g.list.length} sales
+                </span>
+              </div>
+              <table className="w-full">
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {g.list.map(r => (
+                    <tr key={r.id} className="even:bg-gray-50 dark:even:bg-gray-700/40 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10">
+                      <td className="pl-4 pr-2 py-2 w-24 text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" />{fmtTime(r.created_at)}</span>
+                      </td>
+                      <td className="px-2 py-2 text-xs text-gray-700 dark:text-gray-300 font-medium">{r.name}</td>
+                      <td className="pl-2 pr-4 py-2 w-20 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                        <span dangerouslySetInnerHTML={{ __html: formatReportQty(r.qty) }} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
   const [view, setView] = useState<ReportView>('individual_shop');
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
@@ -341,17 +642,6 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
       .eq('shop_id', shopId)
       .gte('created_at', `${date}T00:00:00`)
       .lte('created_at', `${date}T23:59:59`);
-    if (data) {
-      const summary: Record<string, number> = {};
-      data.forEach(o => { summary[o.lens_details.name] = (summary[o.lens_details.name] || 0) + Number(o.quantity); });
-      setReportData(Object.entries(summary).map(([name, qty]) => ({ name, qty })).sort((a, b) => sortLensNames(a.name, b.name)));
-    }
-    setLoading(false);
-  }
-
-  async function fetchSalesForShop(shopId: string) {
-    setLoading(true);
-    const { data } = await supabase.from('sales').select('lens_details, quantity').eq('shop_id', shopId);
     if (data) {
       const summary: Record<string, number> = {};
       data.forEach(o => { summary[o.lens_details.name] = (summary[o.lens_details.name] || 0) + Number(o.quantity); });
@@ -627,7 +917,7 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
           <CardButton label="Orders" icon={<ShoppingCart className="w-5 h-5 text-blue-600 dark:text-blue-400" />} iconBg="bg-blue-50 dark:bg-blue-900/30"
             onClick={() => { fetchOrderDates(selectedShop.id); setView('individual_orders'); }} />
           <CardButton label="Sale" icon={<Tag className="w-5 h-5 text-green-600 dark:text-green-400" />} iconBg="bg-green-50 dark:bg-green-900/30"
-            onClick={() => { fetchSalesForShop(selectedShop.id); setView('individual_sale'); }} />
+            onClick={() => setView('individual_sale')} />
           <CardButton label="Ordered lens quantity" icon={<Layers className="w-5 h-5 text-purple-600 dark:text-purple-400" />} iconBg="bg-purple-50 dark:bg-purple-900/30"
             onClick={() => { fetchOrderDates(selectedShop.id); setView('individual_orderedlensqty'); }} />
         </div>
@@ -652,7 +942,7 @@ export default function ReportsPage({ isDemo = false }: { isDemo?: boolean }) {
       {view === 'individual_orders_date' && selectedDate && (loading ? <Loader /> : <ReportTable items={reportData} title={`${selectedShop?.name} — Orders`} dateStr={formatDate(selectedDate)} />)}
 
       {/* INDIVIDUAL SALE */}
-      {view === 'individual_sale' && (loading ? <Loader /> : <ReportTable items={reportData} title={`${selectedShop?.name} — Sale Report`} />)}
+      {view === 'individual_sale' && selectedShop && <SaleReportView shop={selectedShop} isDemo={isDemo} />}
 
       {/* INDIVIDUAL LENS QTY */}
       {view === 'individual_orderedlensqty' && selectedShop && (

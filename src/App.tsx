@@ -1,111 +1,162 @@
-import { useState, useEffect, useRef } from 'react';
-import { Fingerprint } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { hasStoredBiometricLogin, loginWithBiometric } from '../utils/biometric';
+// App.tsx
+import { useState, useEffect } from 'react';
+import { supabase } from './lib/supabase';
+import Dashboard from './pages/Dashboard';
+import StockPage from './pages/StockPage';
+import OrderPage from './pages/OrderPage';
+import SellPage from './pages/SellPage';
+import ReportsPage from './pages/ReportsPage';
+import Auth from './components/Auth';
+import { ToastContainer } from './components/Toast';
+import CoatingSettings from './components/CoatingSettings';
+import { BiometricButton, BiometricBanner } from './components/BiometricSetup';
+import { saveRefreshToken, clearRefreshToken } from './utils/biometric';
+import { UnsavedChangesProvider, useUnsavedChanges } from './components/UnsavedChanges';
+import { LayoutDashboard, Package, ShoppingCart, LogOut, Tag, FileText } from 'lucide-react';
+import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 
-export default function Auth() {
-  const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [bioAvailable, setBioAvailable] = useState(hasStoredBiometricLogin());
-  const [bioLoading, setBioLoading] = useState(false);
-  const [bioError, setBioError] = useState('');
-  const autoTried = useRef(false);
+function AppShell() {
+  const { confirmLeave } = useUnsavedChanges();
+  const [session, setSession] = useState<any>(null);
+  const [isConfigured, setIsConfigured] = useState(true);
+  const location = useLocation();
 
-  // Fingerprint se login (session milte hi App.tsx ka onAuthStateChange dashboard khol deta hai)
-  const handleBiometric = async () => {
-    setBioError('');
-    setBioLoading(true);
-    const res = await loginWithBiometric();
-    if (!res.ok) {
-      setBioError(res.error || 'Fingerprint login nahi hua.');
-      if (res.needPassword) setBioAvailable(false);
-      setBioLoading(false);
-    }
-  };
-
-  // App khulte hi apne aap fingerprint maango
   useEffect(() => {
-    if (autoTried.current) return;
-    autoTried.current = true;
-    if (hasStoredBiometricLogin()) handleBiometric();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (
+      window.location.search.includes('demo=true') ||
+      !import.meta.env.VITE_SUPABASE_URL ||
+      !import.meta.env.VITE_SUPABASE_ANON_KEY ||
+      import.meta.env.VITE_SUPABASE_URL === 'https://placeholder-url.supabase.co'
+    ) {
+      console.warn("Supabase credentials missing or placeholder. App will run in demo mode.");
+      setIsConfigured(false);
+      setSession({ user: { email: 'iamsanjaysaini@gmail.com' } });
+      return;
+    }
+
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      setSession(initialSession);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      setSession(currentSession);
+      // Fingerprint enabled ho to naya refresh token yaad rakho (token rotate hota rehta hai)
+      if (currentSession?.refresh_token) saveRefreshToken(currentSession.refresh_token);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) alert(error.message);
-    setLoading(false);
-  };
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+        <Auth />
+      </div>
+    );
+  }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
-      <div className="px-8 py-8 text-left bg-white dark:bg-gray-800 shadow-xl rounded-2xl w-full max-w-md border border-gray-100 dark:border-gray-700">
-        <h3 className="text-2xl font-bold text-center text-indigo-600 dark:text-indigo-400 mb-8">Narbada Eye Care LensLedger</h3>
-        {bioAvailable && (
-          <div className="mb-6">
-            <button
-              type="button"
-              onClick={handleBiometric}
-              disabled={bioLoading}
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/50 font-semibold transition-all disabled:opacity-50"
-            >
-              <Fingerprint className="w-5 h-5" />
-              {bioLoading ? 'Verifying...' : 'Login with Fingerprint'}
-            </button>
-            {bioError && <p className="mt-2 text-xs text-red-600 dark:text-red-400 text-center">{bioError}</p>}
-            <div className="flex items-center gap-3 mt-5">
-              <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
-              <span className="text-xs text-gray-400">ya password se</span>
-              <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+      {!isConfigured && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
+          <p className="font-bold">Demo Mode</p>
+          <p>Supabase is not configured. Data will not persist and shop data is mocked.</p>
+        </div>
+      )}
+      <nav className="bg-white dark:bg-gray-800 shadow border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50 transition-all duration-300">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <Link to="/" className="flex-shrink-0 flex flex-col justify-center group">
+                <span className="text-[10px] leading-tight font-bold text-gray-800 dark:text-gray-200 uppercase tracking-[0.2em] transition-all">Narbada Eye Care</span>
+                <span className="text-xl font-bold text-black dark:text-white transition-all -mt-1">LensLedger</span>
+              </Link>
+              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+                <Link to="/" className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400'}`}>
+                  <LayoutDashboard className="w-4 h-4 mr-2" />Dashboard
+                </Link>
+                <Link to="/stock" className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/stock' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400'}`}>
+                  <Package className="w-4 h-4 mr-2" />Stock
+                </Link>
+                <Link to="/order" className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/order' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400'}`}>
+                  <ShoppingCart className="w-4 h-4 mr-2" />Orders
+                </Link>
+                <Link to="/sell" className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/sell' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400'}`}>
+                  <Tag className="w-4 h-4 mr-2" />Sell
+                </Link>
+                <Link to="/reports" className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-all ${location.pathname === '/reports' ? 'border-indigo-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400'}`}>
+                  <FileText className="w-4 h-4 mr-2" />Reports
+                </Link>
+              </div>
             </div>
-          </div>
-        )}
-        <form onSubmit={handleLogin}>
-          <div className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5" htmlFor="email">Email Address</label>
-              <input
-                type="email"
-                placeholder="you@example.com"
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 text-gray-900 dark:text-white transition-all"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Password</label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 text-gray-900 dark:text-white transition-all"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <div className="pt-2">
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <div className="flex flex-col items-end mr-1 sm:mr-2">
+                <span className="text-[10px] sm:text-xs text-gray-800 dark:text-gray-200 font-bold truncate max-w-[120px] sm:max-w-none">
+                  {session?.user?.email}
+                </span>
+              </div>
+              <CoatingSettings isDemo={!isConfigured} />
+              {isConfigured && <BiometricButton />}
               <button
-                className="px-6 py-3 text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 active:bg-indigo-800 w-full font-semibold shadow-lg shadow-indigo-200 dark:shadow-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={loading}
+                onClick={() => confirmLeave(() => { clearRefreshToken(); if (isConfigured) supabase.auth.signOut(); else setSession(null); })}
+                className="inline-flex items-center px-2 py-1 sm:px-3 sm:py-1.5 border border-transparent text-[10px] sm:text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all"
               >
-                {loading ? (
-                  <span className="flex items-center justify-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Signing in...
-                  </span>
-                ) : 'Sign In'}
+                <LogOut className="w-3 h-3 sm:w-4 h-4 mr-1" />
+                <span>Logout</span>
               </button>
             </div>
           </div>
-        </form>
-      </div>
+        </div>
+
+        {/* Mobile menu */}
+        <div className="sm:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-2">
+          <div className="grid grid-cols-5 gap-1">
+            <Link to="/" className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400'}`}>
+              <LayoutDashboard className="w-5 h-5 mb-1" />Dashboard
+            </Link>
+            <Link to="/stock" className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/stock' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400'}`}>
+              <Package className="w-5 h-5 mb-1" />Stock
+            </Link>
+            <Link to="/order" className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/order' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400'}`}>
+              <ShoppingCart className="w-5 h-5 mb-1" />Orders
+            </Link>
+            <Link to="/sell" className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/sell' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400'}`}>
+              <Tag className="w-5 h-5 mb-1" />Sell
+            </Link>
+            <Link to="/reports" className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors ${location.pathname === '/reports' ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400'}`}>
+              <FileText className="w-5 h-5 mb-1" />Reports
+            </Link>
+          </div>
+        </div>
+      </nav>
+
+      {isConfigured && <BiometricBanner />}
+
+      <main className="max-w-7xl py-4 px-4 sm:px-6 lg:px-8">
+        <Routes>
+          <Route path="/" element={<Dashboard isDemo={!isConfigured} />} />
+          <Route path="/stock" element={<StockPage isDemo={!isConfigured} />} />
+          <Route path="/order" element={<OrderPage isDemo={!isConfigured} />} />
+          <Route path="/sell" element={<SellPage isDemo={!isConfigured} />} />
+          <Route path="/reports" element={<ReportsPage isDemo={!isConfigured} />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
+      <ToastContainer />
     </div>
   );
 }
+
+function App() {
+  return (
+    <UnsavedChangesProvider>
+      <AppShell />
+    </UnsavedChangesProvider>
+  );
+}
+
+export default App;

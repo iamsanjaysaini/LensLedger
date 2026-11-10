@@ -1,10 +1,36 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { Fingerprint } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { hasStoredBiometricLogin, loginWithBiometric } from '../utils/biometric';
 
 export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [bioAvailable, setBioAvailable] = useState(hasStoredBiometricLogin());
+  const [bioLoading, setBioLoading] = useState(false);
+  const [bioError, setBioError] = useState('');
+  const autoTried = useRef(false);
+
+  // Fingerprint se login (session milte hi App.tsx ka onAuthStateChange dashboard khol deta hai)
+  const handleBiometric = async () => {
+    setBioError('');
+    setBioLoading(true);
+    const res = await loginWithBiometric();
+    if (!res.ok) {
+      setBioError(res.error || 'Fingerprint login nahi hua.');
+      if (res.needPassword) setBioAvailable(false);
+      setBioLoading(false);
+    }
+  };
+
+  // App khulte hi apne aap fingerprint maango
+  useEffect(() => {
+    if (autoTried.current) return;
+    autoTried.current = true;
+    if (hasStoredBiometricLogin()) handleBiometric();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,6 +44,25 @@ export default function Auth() {
     <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
       <div className="px-8 py-8 text-left bg-white dark:bg-gray-800 shadow-xl rounded-2xl w-full max-w-md border border-gray-100 dark:border-gray-700">
         <h3 className="text-2xl font-bold text-center text-indigo-600 dark:text-indigo-400 mb-8">Narbada Eye Care LensLedger</h3>
+        {bioAvailable && (
+          <div className="mb-6">
+            <button
+              type="button"
+              onClick={handleBiometric}
+              disabled={bioLoading}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/50 font-semibold transition-all disabled:opacity-50"
+            >
+              <Fingerprint className="w-5 h-5" />
+              {bioLoading ? 'Verifying...' : 'Login with Fingerprint'}
+            </button>
+            {bioError && <p className="mt-2 text-xs text-red-600 dark:text-red-400 text-center">{bioError}</p>}
+            <div className="flex items-center gap-3 mt-5">
+              <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+              <span className="text-xs text-gray-400">ya password se</span>
+              <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+            </div>
+          </div>
+        )}
         <form onSubmit={handleLogin}>
           <div className="space-y-5">
             <div>

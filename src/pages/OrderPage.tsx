@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/Toast';
+import { useUnsavedGuard } from '../components/UnsavedChanges';
 import { useCoatings } from '../utils/coatingSync';
 import {
   generateLensRows,
@@ -467,10 +468,10 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     else { setDeltas({ ...deltas, [key]: { qty: newQty, name } }); }
   };
 
-  const saveOrder = async () => {
-    if (isDemo) { showToast('Demo Mode: Orders are not saved.', 'info'); return; }
+  const saveOrder = async (): Promise<boolean> => {
+    if (isDemo) { showToast('Demo Mode: Orders are not saved.', 'info'); return false; }
     const entries = Object.entries(deltas);
-    if (!entries.length) { showToast('Please add items to order.', 'info'); return; }
+    if (!entries.length) { showToast('Please add items to order.', 'info'); return false; }
     setLoading(true);
     let ok = 0, lastErr = null;
     for (const [, data] of entries) {
@@ -482,6 +483,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     setLoading(false);
     if (ok > 0) { showToast(`Orders saved! (${ok} items)`, 'success'); setDeltas({}); }
     else if (lastErr) alert('Failed: ' + (lastErr as any).message);
+    return ok > 0 && !lastErr;
   };
 
   const saveCustomPowerDirectly = async () => {
@@ -596,6 +598,10 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const getShopName = (id: string) => shops.find(s => s.id === id)?.name || id;
 
+  // Unsaved changes: order list me jo lens add kiye hain par Save nahi hua
+  const hasOrderChanges = Object.keys(deltas).length > 0;
+  useUnsavedGuard(hasOrderChanges, () => saveOrder(), () => setDeltas({}));
+
   return (
     <div className="space-y-4 pb-20">
 
@@ -615,8 +621,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             className="bg-blue-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-blue-700 shadow-sm transition-colors">
             <FileText className="w-4 h-4 mr-1" /> Generate Order
           </button>
-          <button onClick={saveOrder} disabled={loading}
-            className="bg-green-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm hover:bg-green-700 disabled:opacity-50 shadow-sm transition-colors">
+          <button onClick={saveOrder} disabled={loading || !hasOrderChanges}
+            className={`px-3 py-1.5 rounded-md flex items-center text-sm transition-colors ${hasOrderChanges ? 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 shadow-sm' : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'}`}>
             <ShoppingCart className="w-4 h-4 mr-1" /> Save
           </button>
         </div>

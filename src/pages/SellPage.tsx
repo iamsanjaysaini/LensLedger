@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/Toast';
+import { useUnsavedGuard, useUnsavedChanges } from '../components/UnsavedChanges';
 import { useCoatings } from '../utils/coatingSync';
 import {
   generateLensRows,
@@ -355,7 +356,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     // Stock page par jitna stock dikh raha hai, usse zyada sell nahi kar sakte
     const available = originalStock[key] || 0;
     if (delta > 0 && newQty > available) {
-      showToast(available > 0 ? `Stock sirf ${available} pair hai.` : 'Stock 0 hai, sell nahi kar sakte.', 'error');
+      showToast(available > 0 ? `Stock sirf ${available} pair hai.` : 'Stock 0 hai, sell nahi kar sakte.', 'info');
       return;
     }
 
@@ -363,10 +364,10 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
     else setDeltas({ ...deltas, [key]: { qty: newQty, name } });
   };
 
-  const saveSale = async () => {
-    if (isDemo) { showToast('Demo Mode: Sales are not saved.', 'info'); return; }
+  const saveSale = async (): Promise<boolean> => {
+    if (isDemo) { showToast('Demo Mode: Sales are not saved.', 'info'); return false; }
     const entries = Object.entries(deltas);
-    if (!entries.length) { showToast('Please add items to sell.', 'info'); return; }
+    if (!entries.length) { showToast('Please add items to sell.', 'info'); return false; }
     setLoading(true);
 
     try {
@@ -395,7 +396,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
       if (short.length) {
         const lines = short.map(p => `• ${p.data.name}: stock ${p.row?.quantity ?? 0}, sell ${p.data.qty}`);
         alert('Stock kam hai, sale save nahi hui:\n' + lines.join('\n'));
-        return;
+        return false;
       }
 
       // Step 3: stock kam karo, phir sale record save karo
@@ -450,8 +451,10 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
         setDeltas({});
       }
       await fetchStock();
+      return failedKeys.length === 0 && !lastErr;
     } catch (e: any) {
       alert('Failed: ' + (e?.message || e));
+      return false;
     } finally {
       setLoading(false);
     }
@@ -476,6 +479,11 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
 
   const getShopName = (id: string) => shops.find(s => s.id === id)?.name || id;
 
+  // Unsaved changes: cart me jo lens add kiye hain par sale save nahi hui
+  const hasSaleChanges = Object.keys(deltas).length > 0;
+  const { confirmLeave } = useUnsavedChanges();
+  useUnsavedGuard(hasSaleChanges, () => saveSale(), () => setDeltas({}));
+
   return (
     <div className="space-y-4 pb-20">
 
@@ -487,8 +495,8 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
             className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-md flex items-center text-sm shadow-sm transition-colors">
             <Edit2 className="w-4 h-4 mr-1" /> Edit Sale
           </button>
-          <button onClick={saveSale} disabled={loading}
-            className="bg-indigo-600 text-white px-3 py-1.5 rounded-md flex items-center hover:bg-indigo-700 disabled:opacity-50 text-sm shadow-sm transition-colors">
+          <button onClick={saveSale} disabled={loading || !hasSaleChanges}
+            className={`px-3 py-1.5 rounded-md flex items-center text-sm transition-colors ${hasSaleChanges ? 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 shadow-sm' : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'}`}>
             <Tag className="w-4 h-4 mr-1" /> Save Sale
           </button>
         </div>
@@ -501,7 +509,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Material</label>
             <div className="flex gap-1.5">
               {MATERIALS.map(m => (
-                <button key={m} onClick={() => setMaterial(m)}
+                <button key={m} onClick={() => confirmLeave(() => setMaterial(m))}
                   className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${material === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
                   {m}
                 </button>
@@ -512,7 +520,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">Vision</label>
             <div className="flex gap-1.5">
               {VISIONS.map(v => (
-                <button key={v} type="button" onClick={() => { setVision(v); setRowAxes({}); }} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${vision === v ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{VISION_LABELS[v]}</button>
+                <button key={v} type="button" onClick={() => confirmLeave(() => { setVision(v); setRowAxes({}); })} className={`flex-1 py-1.5 px-2 rounded-md border text-[10px] font-medium transition-all ${vision === v ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{VISION_LABELS[v]}</button>
               ))}
             </div>
           </div>
@@ -523,7 +531,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Power Type</label>
             <div className="flex flex-wrap gap-1 mt-1">
               {(['SPH', 'CYL', 'Compound', 'Cross Compound'] as PowerType[]).map(type => (
-                <button key={type} onClick={() => setPowerType(type)}
+                <button key={type} onClick={() => confirmLeave(() => setPowerType(type))}
                   className={`px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all ${powerType === type ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-100'}`}>
                   {type}
                 </button>
@@ -533,8 +541,8 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sign</label>
             <div className="flex gap-1.5 mt-1">
-              <button onClick={() => setSign('+')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '+' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>+</button>
-              <button onClick={() => setSign('-')} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
+              <button onClick={() => confirmLeave(() => setSign('+'))} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '+' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>+</button>
+              <button onClick={() => confirmLeave(() => setSign('-'))} className={`flex-1 py-1.5 rounded-md border text-[10px] font-medium transition-all ${sign === '-' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700'}`}>-</button>
             </div>
           </div>
         </div>
@@ -546,7 +554,7 @@ export default function SellPage({ isDemo = false }: { isDemo?: boolean }) {
             <div className="flex flex-wrap gap-1.5">
               {availableCoatings.map(c => (
                 <div key={c} className="relative inline-flex items-center">
-                  <button onClick={() => toggleCoating(c)}
+                  <button onClick={() => confirmLeave(() => toggleCoating(c))}
                     className={`px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${coatings.includes(c) ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`}>
                     {c}
                   </button>

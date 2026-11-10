@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/Toast';
+import { useUnsavedGuard, useUnsavedChanges } from '../components/UnsavedChanges';
 import UniversalSearch from '../components/UniversalSearch';
 import { ChevronRight, Bell, ChevronLeft, AlertTriangle, Calendar, Plus, Minus, ShoppingCart, Loader2 } from 'lucide-react';
 import { Shop, sortLensNames, formatLensName, isPlanoMisplaced } from '../utils/lensUtils';
@@ -226,10 +227,10 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
   const orderItemsCount = Object.keys(orderQtys).length;
 
   // Orders page jaisa hi: `orders` table me insert hota hai, to Orders page ki list me hi dikhega
-  async function addToOrder() {
+  async function addToOrder(): Promise<boolean> {
     const items = lowStockItems.filter(i => (orderQtys[i.id] || 0) > 0);
-    if (!items.length) { showToast('Pehle kisi lens ki qty add karo.', 'info'); return; }
-    if (isDemo) { showToast('Demo Mode: Orders are not saved.', 'info'); return; }
+    if (!items.length) { showToast('Pehle kisi lens ki qty add karo.', 'info'); return false; }
+    if (isDemo) { showToast('Demo Mode: Orders are not saved.', 'info'); return false; }
 
     setOrderSaving(true);
     const failed: string[] = [];
@@ -255,7 +256,12 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
       if (shop) await fetchDateGroups(shop.id);
     }
     if (failed.length) alert('Ye add nahi hue:\n' + failed.join('\n'));
+    return failed.length === 0;
   }
+
+  // Unsaved changes: Low Stock page par jo qty chuni hai par "Add to Order" nahi dabaya
+  const { confirmLeave } = useUnsavedChanges();
+  useUnsavedGuard(orderItemsCount > 0, () => addToOrder(), () => setOrderQtys({}));
 
   function formatDateDisplay(dateStr: string) {
     const d = new Date(dateStr);
@@ -268,7 +274,7 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-3">
-          <button onClick={() => setAlertView('main')} className="p-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition-colors">
+          <button onClick={() => confirmLeave(() => setAlertView('main'))} className="p-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 transition-colors">
             <ChevronLeft className="w-4 h-4" />
           </button>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">{shop?.name || 'Narbada Eye Care'} — Low Stock</h1>

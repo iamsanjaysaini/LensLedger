@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/Toast';
 import { useUnsavedGuard } from '../components/UnsavedChanges';
@@ -88,7 +88,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [rowAxes, setRowAxes] = useState<Record<string, number>>({});
   const [customCoating, setCustomCoating] = useState('');
   const [customPower, setCustomPower] = useState('');
-  const [customQty, setCustomQty] = useState('1.0');
+  const [customQty, setCustomQty] = useState(''); // blank: quantity likhe bina save nahi hoga
   const [customSaving, setCustomSaving] = useState(false);
   const { availableCoatings, addCoating } = useCoatings(isDemo);
 
@@ -142,6 +142,47 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   }, [material, vision, sign, powerType, coatings]);
 
   const lensRows = customRows;
+
+  // Stock page wali current quantity (isi filter ke lenses ki)
+  const [stockMap, setStockMap] = useState<Record<string, number>>({});
+  const [stockLoading, setStockLoading] = useState(false);
+  const stockReqId = useRef(0);
+  const fetchStockQty = useCallback(async () => {
+    if (isDemo || !selectedShop) { setStockMap({}); return; }
+    const reqId = ++stockReqId.current;
+    setStockLoading(true);
+    try {
+      let query = supabase
+        .from('lens_stock')
+        .select('sph, cyl, axis, addition, quantity')
+        .eq('shop_id', selectedShop)
+        .eq('material', material)
+        .eq('vision', vision)
+        .eq('sign', sign)
+        .eq('power_type', powerType)
+        .eq('coatings', `{${coatings.join(',')}}`);
+      if (powerType === 'SPH') query = query.eq('cyl', 0);
+      else if (powerType === 'CYL') query = query.gt('cyl', 0).lte('cyl', 6.0);
+      else query = query.gte('cyl', 0.25);
+      const { data, error } = await query;
+      if (error) throw error;
+      if (reqId !== stockReqId.current) return; // purana jawab, ignore
+      const map: Record<string, number> = {};
+      (data || []).forEach((item: any) => {
+        const axisVal = item.axis !== null && item.axis !== undefined ? item.axis : '';
+        const addVal = item.addition !== null && item.addition !== undefined ? Number(item.addition).toFixed(2) : '';
+        map[`${Number(item.sph).toFixed(2)}:${Number(item.cyl).toFixed(2)}:${axisVal}:${addVal}`] = Number(item.quantity);
+      });
+      setStockMap(map);
+    } catch (err) {
+      console.error('Stock fetch error:', err);
+      if (reqId === stockReqId.current) setStockMap({});
+    } finally {
+      if (reqId === stockReqId.current) setStockLoading(false);
+    }
+  }, [isDemo, selectedShop, material, vision, sign, powerType, coatings]);
+
+  useEffect(() => { fetchStockQty(); }, [fetchStockQty]);
 
   // Single vision lenses never have an axis, so the Axis column is hidden for them (any sign, material, coating or power type).
   const showAxis = vision !== 'single vision' && powerType !== 'SPH' && powerType !== 'Cross Compound';
@@ -435,6 +476,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     }
 
     setUpdateStockLoading(false);
+    if (updatedCount > 0) fetchStockQty();
 
     if (updatedIds.size > 0) {
       setSentOrderRecords(prev => prev.map(r => updatedIds.has(r.id) ? { ...r, stock_updated: true } : r));
@@ -527,18 +569,21 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     return ok > 0 && !lastErr;
   };
 
-  const saveCustomPowerDirectly = async () => {
-    if (!customPower.trim()) return;
-    const qty = parseFloat(customQty) || 1.0;
+  const saveCustomPowerDirectly = async (): Promise<boolean> => {
     const name = customPower.trim();
-    if (isDemo) { showToast('Demo Mode: Custom orders are not saved.', 'info'); return; }
+    if (!name) return false;
+    const qty = parseFloat(customQty);
+    if (!(qty > 0)) { showToast('Quantity likhe bina save nahi hoga. Pehle quantity daalein.', 'error'); return false; }
+    if (isDemo) { showToast('Demo Mode: Custom orders are not saved.', 'info'); return false; }
     setCustomSaving(true);
     const { error } = await supabase.from('orders').insert({
       shop_id: selectedShop, lens_details: { name, custom: true }, quantity: qty
     });
     setCustomSaving(false);
-    if (error) alert('Failed: ' + error.message);
-    else { setCustomPower(''); setCustomQty('1.0'); showToast(`"${name}" (${qty} pair) saved!`, 'success'); }
+    if (error) { alert('Failed: ' + error.message); return false; }
+    setCustomPower(''); setCustomQty('');
+    showToast(`"${name}" (${qty} pair) saved!`, 'success');
+    return true;
   };
 
   const toggleCoating = (c: string) => {
@@ -600,19 +645,24 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       groupMap.get(heading)!.rows.push(item);
     });
     let serial = 0; // numbering 1 se shuru hoke saare groups me last tak continue
-    const groups: { h: string | null; rows: { no: number; n: string; q: string }[] }[] = Array.from(groupMap.values())
-      .sort((a, b) => compareGroupRank(a.rank, b.rank) || a.heading.localeCompare(b.heading))
-      .map(g => ({
-        h: esc(g.heading),
-        rows: g.rows.map(r => ({ no: ++serial, n: esc(r[0]), q: formatQtyHTML(r[1]) })),
-      }));
-    // Custom (Non-Stock) lenses: koi heading nahi, ek line ka gap dekar sabse neeche
+    const groups: { h: string | null; gapBefore?: boolean; rows: { no: number; n: string; q: string }[] }[] = [];
+    // Custom (Non-Stock) lenses sabse pehle, bina heading ke
     if (customItems.length) {
       groups.push({
         h: null,
         rows: customItems.map(r => ({ no: ++serial, n: esc(r[0]), q: formatQtyHTML(r[1]) })),
       });
     }
+    // Uske baad ek line ka gap, phir heading wale groups
+    Array.from(groupMap.values())
+      .sort((a, b) => compareGroupRank(a.rank, b.rank) || a.heading.localeCompare(b.heading))
+      .forEach((g, i) => {
+        groups.push({
+          h: esc(g.heading),
+          gapBefore: customItems.length > 0 && i === 0,
+          rows: g.rows.map(r => ({ no: ++serial, n: esc(r[0]), q: formatQtyHTML(r[1]) })),
+        });
+      });
     // '<' ko escape karte hain taaki script tag kabhi beech me band na ho
     const groupsJson = JSON.stringify(groups).replace(/</g, '\\u003c');
     const fileDate = dateStr.replace(/\//g, '-');
@@ -699,10 +749,10 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             for (;;) {
               var empty = tbody.children.length === 0;
               var nodes = [];
-              if (g.h !== null) {
-                if (empty || curGroup !== g) nodes.push(headEl(g.h, g.started));
-              } else if (!empty && !g.started) {
-                nodes.push(gapEl()); // custom lenses se pehle ek line ka gap
+              if (g.h !== null && (empty || curGroup !== g)) {
+                // custom lenses ke baad pehli heading se pehle ek line ka gap
+                if (g.gapBefore && !empty && !g.started) nodes.push(gapEl());
+                nodes.push(headEl(g.h, g.started));
               }
               nodes.push(rowEl(r));
               nodes.forEach(function(n){ tbody.appendChild(n); });
@@ -760,7 +810,22 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
   // Unsaved changes: order list me jo lens add kiye hain par Save nahi hua
   const hasOrderChanges = Object.keys(deltas).length > 0;
-  useUnsavedGuard(hasOrderChanges, () => saveOrder(), () => setDeltas({}));
+  const hasCustomDraft = customPower.trim() !== '';
+  const saveEverything = async (): Promise<boolean> => {
+    if (hasCustomDraft && !(parseFloat(customQty) > 0)) {
+      showToast('Custom lens ki quantity likhein, tabhi save hoga.', 'error');
+      return false;
+    }
+    let ok = true;
+    if (hasOrderChanges) ok = (await saveOrder()) && ok;
+    if (hasCustomDraft) ok = (await saveCustomPowerDirectly()) && ok;
+    return ok;
+  };
+  useUnsavedGuard(
+    hasOrderChanges || hasCustomDraft,
+    saveEverything,
+    () => { setDeltas({}); setCustomPower(''); setCustomQty(''); }
+  );
 
   return (
     <div className="space-y-4 pb-20">
@@ -869,10 +934,10 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               onKeyPress={(e) => e.key === 'Enter' && saveCustomPowerDirectly()} />
             <label className="w-24 shrink-0 flex items-center bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-md px-2.5 cursor-pointer focus-within:ring-2 focus-within:ring-indigo-500">
               <span className="text-[10px] font-bold text-gray-400 mr-1 select-none">QTY:</span>
-              <input type="number" step="0.5" min="0.5" value={customQty} onChange={(e) => setCustomQty(e.target.value)}
+              <input type="number" step="0.5" min="0.5" placeholder="0" value={customQty} onChange={(e) => setCustomQty(e.target.value)}
                 className="w-full bg-transparent text-sm text-gray-900 dark:text-gray-100 focus:outline-none py-1.5" />
             </label>
-            <button onClick={saveCustomPowerDirectly} disabled={customSaving || !customPower.trim()}
+            <button onClick={saveCustomPowerDirectly} disabled={customSaving || !customPower.trim() || !(parseFloat(customQty) > 0)}
               className="bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center text-sm font-medium hover:bg-indigo-700 shadow-sm transition-colors disabled:opacity-50 shrink-0">
               {customSaving ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Saving...</> : <><ShoppingCart className="w-4 h-4 mr-1" /> Save</>}
             </button>
@@ -888,8 +953,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               <tr>
                 <th className="px-2 py-1.5 text-left text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-48">Description</th>
                 {showAxis && <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Axis</th>}
-                <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Qty</th>
-                <th className="px-2 py-1.5 text-right text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-20">Actions</th>
+                <th className="px-1 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest w-16">Stock</th>
+                <th className="px-2 py-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Order Qty</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -899,6 +964,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                 const name = formatLensName(material, vision, sign, powerType, row.sph, row.cyl, coatings, rowAxis, row.add);
                 const stateKey = `${selectedShop}-${material}-${vision}-${sign}-${powerType}-${row.sph}-${row.cyl}-${rowAxis || ''}-${coatings.join(',')}-${isKTOrProg ? row.add : ''}`;
                 const qty = deltas[stateKey]?.qty || 0;
+                const stockKey = `${parseFloat(row.sph).toFixed(2)}:${parseFloat(row.cyl).toFixed(2)}:${rowAxis || ''}:${row.add || ''}`;
+                const stockQty = stockMap[stockKey] || 0;
                 return (
                   <tr key={rowKey} className="hover:bg-indigo-50/50 dark:hover:bg-gray-700/30 transition-colors even:bg-gray-100 dark:even:bg-gray-700/50">
                     <td className="px-2 py-1.5 whitespace-nowrap text-xs font-medium text-gray-700 dark:text-gray-300 w-48">{name}</td>
@@ -911,13 +978,14 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                         </select>
                       </td>
                     )}
-                    <td className={`px-1 py-1.5 whitespace-nowrap text-[10px] text-center font-bold ${qty > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}`}>
-                      {qty.toFixed(2)}
+                    <td className={`px-1 py-1.5 whitespace-nowrap text-xs text-center font-bold ${isDemo || stockLoading ? 'text-gray-300 dark:text-gray-600' : stockQty <= 0 ? 'text-red-500 dark:text-red-400' : 'text-gray-800 dark:text-gray-200'}`}>
+                      {isDemo ? '-' : stockLoading ? '...' : stockQty.toFixed(2)}
                     </td>
-                    <td className="px-2 py-1.5 whitespace-nowrap text-right">
-                      <div className="flex justify-end gap-1">
-                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5, rowAxis, row.add)} className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 transition-colors"><Minus className="w-6 h-6" /></button>
-                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5, rowAxis, row.add)} className="p-3 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 transition-colors"><Plus className="w-6 h-6" /></button>
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, -0.5, rowAxis, row.add)} className="p-2.5 rounded-md bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 hover:bg-red-100 transition-colors"><Minus className="w-5 h-5" /></button>
+                        <span className={`w-14 text-center text-sm font-bold ${qty > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}`}>{qty.toFixed(2)}</span>
+                        <button onClick={() => handleQuantityChange(row.sph, row.cyl, name, 0.5, rowAxis, row.add)} className="p-2.5 rounded-md bg-green-50 dark:bg-green-900/20 text-green-500 dark:text-green-400 hover:bg-green-100 transition-colors"><Plus className="w-5 h-5" /></button>
                       </div>
                     </td>
                   </tr>

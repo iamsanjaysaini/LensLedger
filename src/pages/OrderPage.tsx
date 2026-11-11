@@ -686,6 +686,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           td.grp{background:#f1f2f4;font-weight:bold;font-size:14px}
           tr.gap td{border:none;height:18px;padding:0;background:transparent}
           col.c-num{width:36px}col.c-qty{width:72px}
+          td{color:#000}
+          td.name{color:#000;font-weight:bold}
           td.num-col{text-align:right;font-weight:bold;white-space:nowrap;padding:2px 3px}
           .qty-col{text-align:center;font-weight:bold;white-space:nowrap}
           .frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;font-size:.75em;line-height:1;margin:0 1px}

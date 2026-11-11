@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Fragment } from 'react';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/Toast';
 import { useUnsavedGuard, useUnsavedChanges } from '../components/UnsavedChanges';
@@ -21,6 +21,38 @@ interface LowStockItem {
 }
 
 type AlertView = 'main' | 'individual';
+
+// Low stock lenses ko category (sign + power type + coating + material + vision) ke hisaab se group karo.
+function getLowStockGroup(item: LowStockItem): { key: string; heading: string; rank: (number | string)[] } {
+  const sign = item.sign || '-';
+  const coat = (item.coatings || []).join(' ');
+  const materialPart = item.material === 'CR' ? '' : item.material;
+  const visionPart = item.vision === 'single vision' ? '' : item.vision;
+  const heading = [sign, item.power_type, coat, materialPart, visionPart]
+    .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim().toUpperCase();
+  const visionRank = item.vision === 'single vision' ? 0 : item.vision === 'KT' ? 1 : 2;
+  const materialRank = item.material === 'CR' ? 0 : item.material === 'Poly' ? 1 : 2;
+  const signRank = sign === '-' ? 0 : 1;
+  const coatKey = (coat.toUpperCase() === 'HC' ? '0' : '1') + coat.toUpperCase();
+  const typeRank = item.power_type === 'SPH' ? 0 : item.power_type === 'CYL' ? 1 : item.power_type === 'Compound' ? 2 : 3;
+  return { key: heading, heading, rank: [visionRank, materialRank, signRank, coatKey, typeRank] };
+}
+
+function groupLowStock(items: LowStockItem[]) {
+  const map = new Map<string, { heading: string; rank: (number | string)[]; items: LowStockItem[] }>();
+  items.forEach(it => {
+    const g = getLowStockGroup(it);
+    if (!map.has(g.key)) map.set(g.key, { heading: g.heading, rank: g.rank, items: [] });
+    map.get(g.key)!.items.push(it);
+  });
+  const cmp = (a: (number | string)[], b: (number | string)[]) => {
+    for (let i = 0; i < a.length; i++) { if (a[i] < b[i]) return -1; if (a[i] > b[i]) return 1; }
+    return 0;
+  };
+  return Array.from(map.values())
+    .sort((a, b) => cmp(a.rank, b.rank) || a.heading.localeCompare(b.heading))
+    .map(g => ({ ...g, items: [...g.items].sort((a, b) => sortLensNames(a.lens_name, b.lens_name)) }));
+}
 
 function formatQty(qty: number): string {
   const whole = Math.floor(qty);
@@ -299,10 +331,17 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                      {lowStockItems.map((item) => {
+                      {groupLowStock(lowStockItems).map((group) => (
+                        <Fragment key={group.heading}>
+                        <tr>
+                          <td colSpan={4} className="px-3 py-1.5 bg-orange-50 dark:bg-orange-900/20 text-xs font-bold text-orange-800 dark:text-orange-300 tracking-wide border-t border-orange-100 dark:border-orange-800/40">
+                            {group.heading} <span className="font-medium text-[10px] text-orange-600 dark:text-orange-400">({group.items.length})</span>
+                          </td>
+                        </tr>
+                        {group.items.map((item) => {
                         const q = orderQtys[item.id] || 0;
                         return (
-                          <tr key={item.id} className="hover:bg-orange-50/40 even:bg-gray-50 dark:even:bg-gray-700/30">
+                          <tr key={item.id} className="hover:bg-orange-50/40">
                             <td className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300">{item.lens_name}</td>
                             <td className="px-3 py-2 text-center text-xs font-bold text-orange-600">{formatQty(item.quantity)}</td>
                             <td className="px-3 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400">{formatQty(item.alert_qty)}</td>
@@ -327,7 +366,9 @@ export default function Dashboard({ isDemo = false }: { isDemo?: boolean }) {
                             </td>
                           </tr>
                         );
-                      })}
+                        })}
+                        </Fragment>
+                      ))}
                     </tbody>
                   </table>
                 </div>

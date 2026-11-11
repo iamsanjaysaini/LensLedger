@@ -28,7 +28,7 @@ import { parseLensName, isStockLens } from '../utils/lensUtils';
 
 interface OrderRecord {
   id: string;
-  lens_details: { name: string };
+  lens_details: { name: string; custom?: boolean };
   quantity: number;
   created_at: string;
   shop_id: string;
@@ -489,7 +489,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     if (isNaN(qty) || qty <= 0) { alert('Valid quantity enter karo.'); return; }
     const { error } = await supabase
       .from('orders')
-      .update({ lens_details: { name: editingName }, quantity: qty })
+      .update({
+        lens_details: orderRecords.find(r => r.id === id)?.lens_details?.custom
+          ? { name: editingName, custom: true }
+          : { name: editingName },
+        quantity: qty,
+      })
       .eq('id', id);
     if (error) { alert('Update failed: ' + error.message); return; }
     setEditingId(null);
@@ -529,7 +534,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     if (isDemo) { showToast('Demo Mode: Custom orders are not saved.', 'info'); return; }
     setCustomSaving(true);
     const { error } = await supabase.from('orders').insert({
-      shop_id: selectedShop, lens_details: { name }, quantity: qty
+      shop_id: selectedShop, lens_details: { name, custom: true }, quantity: qty
     });
     setCustomSaving(false);
     if (error) alert('Failed: ' + error.message);
@@ -554,13 +559,36 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
 
   const generateOrderReport = async () => {
+    // Window click par hi khol lete hain (baad me kholne par popup block ho sakta hai)
+    const win = window.open('', '_blank');
+    if (!win) { alert('Popup block ho gaya. Browser me popup allow karein.'); return; }
+    win.document.write('<p style="font-family:sans-serif;padding:16px">Report ban rahi hai...</p>');
     setLoading(true);
     const today = new Date().toISOString().split('T')[0];
     const { data: orders } = await supabase.from('orders').select('lens_details, quantity').gte('created_at', today);
-    if (!orders?.length) { setLoading(false); alert('No orders found for today.'); return; }
-    const summary: Record<string, number> = {};
-    orders.forEach(o => { summary[o.lens_details.name] = (summary[o.lens_details.name] || 0) + Number(o.quantity); });
-    const items = Object.entries(summary).sort((a, b) => sortLensNames(a[0], b[0]));
+    if (!orders?.length) { setLoading(false); win.close(); alert('No orders found for today.'); return; }
+
+    // Pehle (flag, naam) ke hisaab se jodo
+    const raw: Record<string, { name: string; custom: boolean; qty: number }> = {};
+    orders.forEach(o => {
+      const name = o.lens_details.name;
+      const custom = o.lens_details.custom === true;
+      const key = `${custom ? 'C' : 'S'}|${name}`;
+      if (!raw[key]) raw[key] = { name, custom, qty: 0 };
+      raw[key].qty += Number(o.quantity);
+    });
+    // Purane orders (flag nahi) me: stock list me na ho to custom (non-stock) maano
+    await Promise.all(Object.values(raw).filter(e => !e.custom).map(async e => {
+      try { e.custom = !(await isStockLens(parseLensName(e.name))); } catch { /* check fail -> stock maano */ }
+    }));
+    const stockTotals: Record<string, number> = {};
+    const customTotals: Record<string, number> = {};
+    Object.values(raw).forEach(e => {
+      const target = e.custom ? customTotals : stockTotals;
+      target[e.name] = (target[e.name] || 0) + e.qty;
+    });
+    const items = Object.entries(stockTotals).sort((a, b) => sortLensNames(a[0], b[0]));
+    const customItems = Object.entries(customTotals).sort((a, b) => sortLensNames(a[0], b[0]));
     const dateStr = new Date().toLocaleDateString('en-GB');
     const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -572,18 +600,25 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       groupMap.get(heading)!.rows.push(item);
     });
     let serial = 0; // numbering 1 se shuru hoke saare groups me last tak continue
-    const groups = Array.from(groupMap.values())
+    const groups: { h: string | null; rows: { no: number; n: string; q: string }[] }[] = Array.from(groupMap.values())
       .sort((a, b) => compareGroupRank(a.rank, b.rank) || a.heading.localeCompare(b.heading))
       .map(g => ({
         h: esc(g.heading),
         rows: g.rows.map(r => ({ no: ++serial, n: esc(r[0]), q: formatQtyHTML(r[1]) })),
       }));
+    // Custom (Non-Stock) lenses: koi heading nahi, ek line ka gap dekar sabse neeche
+    if (customItems.length) {
+      groups.push({
+        h: null,
+        rows: customItems.map(r => ({ no: ++serial, n: esc(r[0]), q: formatQtyHTML(r[1]) })),
+      });
+    }
     // '<' ko escape karte hain taaki script tag kabhi beech me band na ho
     const groupsJson = JSON.stringify(groups).replace(/</g, '\\u003c');
     const fileDate = dateStr.replace(/\//g, '-');
     setLoading(false);
-    const win = window.open('', '_blank');
-    if (win) {
+    {
+      win.document.open();
       win.document.write(`<html><head>
         <title>Order Report - ${dateStr}</title>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -597,8 +632,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           .header{border-bottom:2px solid black;padding-bottom:4px;margin-bottom:8px;text-align:center;font-weight:bold;font-size:12px}
           .columns{display:flex;gap:4px;align-items:flex-start}.column{flex:1;min-width:0}
           table{width:100%;border-collapse:collapse;table-layout:fixed}
-          td{border:1px solid #ccc;padding:2px 4px;text-align:left;line-height:1.2;font-size:12px;vertical-align:middle;word-wrap:break-word}
-          td.grp{background:#e5e7eb;font-weight:bold;font-size:14px;border:1px solid #888}
+          td{border:none;border-bottom:1px solid #d9d9d9;padding:2px 4px;text-align:left;line-height:1.2;font-size:12px;vertical-align:middle;word-wrap:break-word}
+          td.grp{background:#f1f2f4;font-weight:bold;font-size:14px}
+          tr.gap td{border:none;height:18px;padding:0;background:transparent}
           col.c-num{width:36px}col.c-qty{width:72px}
           td.num-col{text-align:right;font-weight:bold;white-space:nowrap;padding:2px 3px}
           .qty-col{text-align:center;font-weight:bold;white-space:nowrap}
@@ -647,6 +683,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             tr.innerHTML = '<td class="grp" colspan="3">' + text + (contd ? ' (contd.)' : '') + '</td>';
             return tr;
           }
+          function gapEl(){
+            var tr = document.createElement('tr');
+            tr.className = 'gap';
+            tr.innerHTML = '<td colspan="3"></td>';
+            return tr;
+          }
           function rowEl(r){
             var tr = document.createElement('tr');
             tr.innerHTML = '<td class="num-col">' + r.no + '.</td><td class="name">' + r.n + '</td><td class="qty-col">' + r.q + '</td>';
@@ -656,9 +698,12 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           function put(g, r){
             for (;;) {
               var empty = tbody.children.length === 0;
-              var needHead = empty || curGroup !== g;
               var nodes = [];
-              if (needHead) nodes.push(headEl(g.h, g.started));
+              if (g.h !== null) {
+                if (empty || curGroup !== g) nodes.push(headEl(g.h, g.started));
+              } else if (!empty && !g.started) {
+                nodes.push(gapEl()); // custom lenses se pehle ek line ka gap
+              }
               nodes.push(rowEl(r));
               nodes.forEach(function(n){ tbody.appendChild(n); });
               if (!overflow() || empty) { curGroup = g; g.started = true; return; }

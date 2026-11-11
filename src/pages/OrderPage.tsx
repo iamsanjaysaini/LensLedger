@@ -41,6 +41,42 @@ interface DateSummary {
   totalQty: number;
 }
 
+// ---------- Generate Order report helpers ----------
+// Lens naam se power ke numbers hata kar group heading banata hai.
+// "-1.00 SPH HC" -> "- SPH HC", "-1.50 CYL AXIS 135 ADD +2.50 HC KT" -> "- CYL HC KT"
+function getGroupHeading(name: string): string {
+  let t = name
+    .replace(/\bADD\s*\+?\d+(\.\d+)?/gi, '')
+    .replace(/\bAXIS\s*\d+/gi, '')
+    .replace(/([+-])\d+(\.\d+)?\/([+-])\d+(\.\d+)?/g, '$1 / $3')
+    .replace(/([+-])\d+(\.\d+)?/g, '$1');
+  t = t.replace(/\s+/g, ' ').trim().toUpperCase();
+  return t || name.toUpperCase();
+}
+
+// Groups ka order: single vision -> KT -> Prograssive, phir CR -> Poly -> Glass,
+// phir minus (-) -> plus (+), phir HC pehle baaki coatings baad me, phir SPH -> CYL -> Compound.
+function getGroupRank(name: string): (number | string)[] {
+  const p = parseLensName(name);
+  if (!p) return [99, 0, 0, '', 0];
+  const visionRank = p.vision === 'single vision' ? 0 : p.vision === 'KT' ? 1 : 2;
+  const materialRank = p.material === 'CR' ? 0 : p.material === 'Poly' ? 1 : 2;
+  const isPlano = /^plano/i.test(name.trim());
+  const signRank = isPlano ? -1 : p.sign === '-' ? 0 : 1;
+  const coat = p.coatings.join(' ');
+  const coatKey = (coat.toUpperCase() === 'HC' ? '0' : '1') + coat.toUpperCase();
+  const typeRank = p.powerType === 'SPH' ? 0 : p.powerType === 'CYL' ? 1 : p.powerType === 'Compound' ? 2 : 3;
+  return [visionRank, materialRank, signRank, coatKey, typeRank];
+}
+
+function compareGroupRank(a: (number | string)[], b: (number | string)[]): number {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] < b[i]) return -1;
+    if (a[i] > b[i]) return 1;
+  }
+  return 0;
+}
+
 export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShop, setSelectedShop] = useState('');
@@ -526,8 +562,25 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     orders.forEach(o => { summary[o.lens_details.name] = (summary[o.lens_details.name] || 0) + Number(o.quantity); });
     const items = Object.entries(summary).sort((a, b) => sortLensNames(a[0], b[0]));
     const dateStr = new Date().toLocaleDateString('en-GB');
-    const col1 = items.slice(0, 40);
-    const col2 = items.slice(40);
+    const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // Ek jaise lenses ko ek heading ke neeche group karo
+    const groupMap = new Map<string, { heading: string; rank: (number | string)[]; rows: [string, number][] }>();
+    items.forEach(item => {
+      const heading = getGroupHeading(item[0]);
+      if (!groupMap.has(heading)) groupMap.set(heading, { heading, rank: getGroupRank(item[0]), rows: [] });
+      groupMap.get(heading)!.rows.push(item);
+    });
+    let serial = 0; // numbering 1 se shuru hoke saare groups me last tak continue
+    const groups = Array.from(groupMap.values())
+      .sort((a, b) => compareGroupRank(a.rank, b.rank) || a.heading.localeCompare(b.heading))
+      .map(g => ({
+        h: esc(g.heading),
+        rows: g.rows.map(r => ({ no: ++serial, n: esc(r[0]), q: formatQtyHTML(r[1]) })),
+      }));
+    // '<' ko escape karte hain taaki script tag kabhi beech me band na ho
+    const groupsJson = JSON.stringify(groups).replace(/</g, '\\u003c');
+    const fileDate = dateStr.replace(/\//g, '-');
     setLoading(false);
     const win = window.open('', '_blank');
     if (win) {
@@ -536,48 +589,110 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
         <style>
           @page{size:210mm 297mm;margin:0}*{box-sizing:border-box}
-          body{font-family:'Courier New',monospace;font-size:10px;margin:0;padding:0;background:white}
+          body{font-family:'Courier New',monospace;font-size:12px;margin:0;padding:0;background:#f3f4f6}
           .controls{padding:8px 16px;display:flex;gap:10px;justify-content:center;background:white;border-bottom:1px solid #eee}
           .btn{background:#4f46e5;color:white;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-family:sans-serif;font-size:14px}
           .btn:hover{background:#4338ca}
-          .page-container{background:white;width:595px;height:842px;overflow:hidden;padding:8px 6px;margin:0 auto}
+          .page-container{background:white;width:595px;height:842px;overflow:hidden;padding:8px 6px;margin:0 auto 12px;box-shadow:0 0 4px rgba(0,0,0,.25)}
           .header{border-bottom:2px solid black;padding-bottom:4px;margin-bottom:8px;text-align:center;font-weight:bold;font-size:12px}
-          .columns{display:flex;gap:4px}.column{flex:1}
-          table{width:100%;border-collapse:collapse}
-          td{border:1px solid #ccc;padding:2px 4px;text-align:left;line-height:1.2}
-          .qty-col{width:65px;text-align:center;font-weight:bold;white-space:nowrap}
+          .columns{display:flex;gap:4px;align-items:flex-start}.column{flex:1;min-width:0}
+          table{width:100%;border-collapse:collapse;table-layout:fixed}
+          td{border:1px solid #ccc;padding:2px 4px;text-align:left;line-height:1.2;font-size:12px;vertical-align:middle;word-wrap:break-word}
+          td.grp{background:#e5e7eb;font-weight:bold;font-size:14px;border:1px solid #888}
+          col.c-num{width:36px}col.c-qty{width:72px}
+          td.num-col{text-align:right;font-weight:bold;white-space:nowrap;padding:2px 3px}
+          .qty-col{text-align:center;font-weight:bold;white-space:nowrap}
           .frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;font-size:.75em;line-height:1;margin:0 1px}
           .frac .num{display:block;border-bottom:1px solid black;padding:0 1px;line-height:1.1}
           .frac .den{display:block;padding:0 1px;line-height:1.1}
-          @media print{.controls{display:none}body{background:white}}
+          @media print{
+            .controls{display:none}
+            body{background:white}
+            .page-container{margin:0;box-shadow:none;page-break-after:always}
+            .page-container:last-child{page-break-after:auto}
+          }
         </style>
       </head><body>
         <div class="controls">
           <button class="btn" onclick="window.print()">Print / Save PDF</button>
           <button class="btn" onclick="downloadJPG()">Download JPG</button>
         </div>
-        <div id="capture" class="page-container">
-          <div class="header">DATE: ${dateStr}</div>
-          <div class="columns">
-            <div class="column"><table><tbody>
-              ${col1.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatQtyHTML(item[1])}</td></tr>`).join('')}
-            </tbody></table></div>
-            <div class="column"><table><tbody>
-              ${col2.map(item => `<tr><td>${item[0]}</td><td class="qty-col">${formatQtyHTML(item[1])}</td></tr>`).join('')}
-            </tbody></table></div>
-          </div>
-        </div>
+        <div id="pages"></div>
         <script>
+          var GROUPS = ${groupsJson};
+          var DATE_STR = ${JSON.stringify(dateStr)};
+          var FILE_DATE = ${JSON.stringify(fileDate)};
+          var pagesEl = document.getElementById('pages');
+          var cur = null, colIdx = 0, tbody = null, curGroup = null;
+
+          function newPage(){
+            var p = document.createElement('div');
+            p.className = 'page-container';
+            p.innerHTML = '<div class="header"></div><div class="columns">'
+              + '<div class="column"><table><colgroup><col class="c-num"><col><col class="c-qty"></colgroup><tbody></tbody></table></div>'
+              + '<div class="column"><table><colgroup><col class="c-num"><col><col class="c-qty"></colgroup><tbody></tbody></table></div></div>';
+            pagesEl.appendChild(p);
+            cur = p; colIdx = 0; tbody = p.getElementsByTagName('tbody')[0]; curGroup = null;
+          }
+          function nextColumn(){
+            if (colIdx === 0) { colIdx = 1; tbody = cur.getElementsByTagName('tbody')[1]; curGroup = null; }
+            else { newPage(); }
+          }
+          function overflow(){
+            var limit = cur.getBoundingClientRect().bottom - 8;
+            return tbody.getBoundingClientRect().bottom > limit;
+          }
+          function headEl(text, contd){
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td class="grp" colspan="3">' + text + (contd ? ' (contd.)' : '') + '</td>';
+            return tr;
+          }
+          function rowEl(r){
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td class="num-col">' + r.no + '.</td><td class="name">' + r.n + '</td><td class="qty-col">' + r.q + '</td>';
+            return tr;
+          }
+          // Heading + row saath rakhta hai. Jagah na ho to agle column / agle page par jata hai.
+          function put(g, r){
+            for (;;) {
+              var empty = tbody.children.length === 0;
+              var needHead = empty || curGroup !== g;
+              var nodes = [];
+              if (needHead) nodes.push(headEl(g.h, g.started));
+              nodes.push(rowEl(r));
+              nodes.forEach(function(n){ tbody.appendChild(n); });
+              if (!overflow() || empty) { curGroup = g; g.started = true; return; }
+              nodes.forEach(function(n){ tbody.removeChild(n); });
+              nextColumn();
+            }
+          }
+
+          newPage();
+          GROUPS.forEach(function(g){ g.rows.forEach(function(r){ put(g, r); }); });
+
+          var pgs = pagesEl.children;
+          for (var i = 0; i < pgs.length; i++) {
+            pgs[i].querySelector('.header').textContent =
+              'DATE: ' + DATE_STR + (pgs.length > 1 ? '   (Page ' + (i + 1) + ' of ' + pgs.length + ')' : '');
+          }
+
           function downloadJPG(){
-            const btn=document.querySelector('button[onclick="downloadJPG()"]');
-            if(btn){btn.disabled=true;btn.innerText='Generating...';}
-            html2canvas(document.querySelector("#capture"),{scale:1,width:595,height:842,windowWidth:595,windowHeight:842,backgroundColor:'#ffffff'}).then(canvas=>{
-              const link=document.createElement('a');
-              link.download='Order_${dateStr.replace(/\//g, '-')}.jpg';
-              link.href=canvas.toDataURL('image/jpeg',0.92);
-              link.click();
-              if(btn){btn.disabled=false;btn.innerText='Download JPG';}
-            });
+            var btn = document.querySelector('button[onclick="downloadJPG()"]');
+            if (btn) { btn.disabled = true; btn.innerText = 'Generating...'; }
+            var list = document.querySelectorAll('.page-container');
+            var idx = 0;
+            function next(){
+              if (idx >= list.length) { if (btn) { btn.disabled = false; btn.innerText = 'Download JPG'; } return; }
+              html2canvas(list[idx], {scale:2, width:595, height:842, windowWidth:595, backgroundColor:'#ffffff'}).then(function(canvas){
+                var link = document.createElement('a');
+                link.download = 'Order_' + FILE_DATE + (list.length > 1 ? '_page' + (idx + 1) : '') + '.jpg';
+                link.href = canvas.toDataURL('image/jpeg', 0.92);
+                link.click();
+                idx++;
+                setTimeout(next, 400);
+              });
+            }
+            next();
           }
         </script>
       </body></html>`);

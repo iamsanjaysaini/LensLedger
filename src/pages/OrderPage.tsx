@@ -46,6 +46,12 @@ interface DateSummary {
 // Aaj (local din) ki shuruaat. "Edit & Resend" sirf usi din ke liye chalta hai jis din order Sent mark hua.
 const startOfTodayMs = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const isSentToday = (r: { sent_at?: string | null }) => !!r.sent_at && new Date(r.sent_at).getTime() >= startOfTodayMs();
+// Unsent orders ki sirf ek hi list hoti hai (koi date nahi). Date tabhi lagti hai jab order Sent mark ho.
+const UNSENT_KEY = 'unsent';
+const localDayKey = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const fmtWhen = (iso: string) => {
   const d = new Date(iso);
   return `${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}, ${d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase()}`;
@@ -257,7 +263,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   const fetchSentOrderDates = useCallback(async () => {
     if (isDemo) {
       setDateSummaries([
-        { date: new Date().toISOString().split('T')[0], count: 3, totalQty: 5, unsentCount: 1 }
+        { date: UNSENT_KEY, count: 1, totalQty: 2, unsentCount: 1 },
+        { date: new Date().toISOString().split('T')[0], count: 2, totalQty: 3, unsentCount: 0 }
       ]);
       return;
     }
@@ -272,21 +279,24 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       return;
     }
 
+    // Unsent orders -> ek hi "Unsent" list (bina date). Sent orders -> unke sent hone ki date ke hisaab se.
     const map: Record<string, { count: number; totalQty: number; unsent: number }> = {};
     data.forEach(item => {
-      const dateStr = item.created_at.split('T')[0];
-      if (!map[dateStr]) map[dateStr] = { count: 0, totalQty: 0, unsent: 0 };
-      map[dateStr].count += 1;
-      map[dateStr].totalQty += Number(item.quantity);
-      if (!item.sent_at) map[dateStr].unsent += 1;
+      const key = item.sent_at ? localDayKey(item.sent_at) : UNSENT_KEY;
+      if (!map[key]) map[key] = { count: 0, totalQty: 0, unsent: 0 };
+      map[key].count += 1;
+      map[key].totalQty += Number(item.quantity);
+      if (!item.sent_at) map[key].unsent += 1;
     });
 
-    const summaries: DateSummary[] = Object.keys(map).map(date => ({
-      date,
-      count: map[date].count,
-      totalQty: map[date].totalQty,
-      unsentCount: map[date].unsent
-    }));
+    const summaries: DateSummary[] = Object.keys(map)
+      .sort((a, b) => a === UNSENT_KEY ? -1 : b === UNSENT_KEY ? 1 : b.localeCompare(a))
+      .map(date => ({
+        date,
+        count: map[date].count,
+        totalQty: map[date].totalQty,
+        unsentCount: map[date].unsent
+      }));
 
     setDateSummaries(summaries);
     setSentLoading(false);
@@ -325,12 +335,18 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       return;
     }
 
-    const { data } = await supabase
+    let q = supabase
       .from('orders')
-      .select('id, lens_details, quantity, created_at, shop_id, stock_updated, sent_at')
-      .gte('created_at', `${dateStr}T00:00:00`)
-      .lte('created_at', `${dateStr}T23:59:59`)
-      .order('created_at', { ascending: false });
+      .select('id, lens_details, quantity, created_at, shop_id, stock_updated, sent_at');
+    if (dateStr === UNSENT_KEY) {
+      q = q.is('sent_at', null).order('created_at', { ascending: false });
+    } else {
+      // Local din ki sent_at range (India time ke hisaab se din)
+      const dayStart = new Date(`${dateStr}T00:00:00`);
+      const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
+      q = q.gte('sent_at', dayStart.toISOString()).lt('sent_at', dayEnd.toISOString()).order('sent_at', { ascending: false });
+    }
+    const { data } = await q;
 
     const records = data || [];
     setSentOrderRecords(records);
@@ -408,6 +424,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     setSentSelectedIds(new Set());
     showToast(`${doneIds.size} lens Sent mark ho gaye.`, 'success');
     fetchSentOrderDates();
+    // Unsent list me ho to jo sent ho gaye wo list se hat jayen
+    if (selectedDate === UNSENT_KEY) fetchOrdersForDate(UNSENT_KEY);
   };
 
   // EDIT & RESEND: sirf aaj sent hue lens ko wapas unsent karke edit ke liye kholta hai
@@ -707,9 +725,9 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
     if (!win) { alert('Popup block ho gaya. Browser me popup allow karein.'); return; }
     win.document.write('<p style="font-family:sans-serif;padding:16px">Report ban rahi hai...</p>');
     setLoading(true);
-    const today = new Date().toISOString().split('T')[0];
-    const { data: orders } = await supabase.from('orders').select('lens_details, quantity').gte('created_at', today);
-    if (!orders?.length) { setLoading(false); win.close(); alert('No orders found for today.'); return; }
+    // Report me saare unsent orders aate hain (chahe kisi bhi din add hue ho)
+    const { data: orders } = await supabase.from('orders').select('lens_details, quantity').is('sent_at', null);
+    if (!orders?.length) { setLoading(false); win.close(); alert('Koi unsent order nahi hai.'); return; }
 
     // Pehle (flag, naam) ke hisaab se jodo
     const raw: Record<string, { name: string; custom: boolean; qty: number }> = {};
@@ -1118,10 +1136,10 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                 <div>
                   <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
                     <PackageCheck className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                    Sent Orders {selectedDate ? `- ${new Date(selectedDate).toLocaleDateString('en-GB')}` : ''}
+                    Sent Orders {selectedDate ? (selectedDate === UNSENT_KEY ? '- Unsent' : `- ${new Date(selectedDate).toLocaleDateString('en-GB')}`) : ''}
                   </h2>
                   <p className="text-[10px] text-gray-400 mt-0.5">
-                    {selectedDate ? 'Unsent lens ko Mark Sent karo, sent lens ko stock me update karo' : 'Select a date to view orders'}
+                    {selectedDate ? 'Unsent lens ko Mark Sent karo, sent lens ko stock me update karo' : 'Unsent list ya sent date chuno'}
                   </p>
                 </div>
               </div>
@@ -1139,27 +1157,28 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                     <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading dates...
                   </div>
                 ) : dateSummaries.length === 0 ? (
-                  <div className="text-center py-16 text-sm text-gray-400">Koi sent orders nahi mile.</div>
+                  <div className="text-center py-16 text-sm text-gray-400">Koi order nahi mila.</div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                     {dateSummaries.map(summary => (
                       <button
                         key={summary.date}
                         onClick={() => fetchOrdersForDate(summary.date)}
-                        className="flex flex-col items-start p-3 bg-gray-50 dark:bg-gray-800/80 hover:bg-purple-50 dark:hover:bg-purple-900/20 border border-gray-200 dark:border-gray-700 rounded-lg transition-all text-left group shadow-sm hover:border-purple-300 dark:hover:border-purple-600"
+                        className={`flex flex-col items-start p-3 hover:bg-purple-50 dark:hover:bg-purple-900/20 border rounded-lg transition-all text-left group shadow-sm hover:border-purple-300 dark:hover:border-purple-600 ${summary.date === UNSENT_KEY ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-300 dark:border-amber-700' : 'bg-gray-50 dark:bg-gray-800/80 border-gray-200 dark:border-gray-700'}`}
                       >
                         <div className="flex items-center justify-between w-full mb-2">
                           <span className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                            {new Date(summary.date).toLocaleDateString('en-GB')}
+                            {summary.date === UNSENT_KEY
+                              ? <><Send className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> Unsent Orders</>
+                              : <><Calendar className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" /> {new Date(summary.date).toLocaleDateString('en-GB')}</>}
                           </span>
                           <span className="text-[10px] bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-semibold">
                             {summary.count} items
                           </span>
                         </div>
-                        {!!summary.unsentCount && (
+                        {summary.date === UNSENT_KEY && (
                           <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded-full mb-1.5">
-                            {summary.unsentCount} unsent
+                            Abhi bheje nahi · koi date nahi
                           </span>
                         )}
                         <span className="text-[10px] text-gray-500 dark:text-gray-400">
@@ -1223,7 +1242,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
                       <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading orders...
                     </div>
                   ) : sentOrderRecords.length === 0 ? (
-                    <div className="text-center py-16 text-sm text-gray-400">Is date ke orders nahi mile.</div>
+                    <div className="text-center py-16 text-sm text-gray-400">Is list me koi order nahi hai.</div>
                   ) : (
                     <table className="w-full">
                       <thead className="bg-gray-50 dark:bg-gray-800/80 sticky top-0">
@@ -1305,7 +1324,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             {/* Footer */}
             <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
               <span className="text-[10px] text-gray-400">
-                {selectedDate ? `${sentOrderRecords.length} items total` : `${dateSummaries.length} dates recorded`}
+                {selectedDate ? `${sentOrderRecords.length} items total` : `${dateSummaries.filter(d => d.date !== UNSENT_KEY).length} dates recorded`}
               </span>
               <button onClick={() => setShowSentOrders(false)}
                 className="px-4 py-1.5 text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">

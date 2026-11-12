@@ -39,7 +39,7 @@ const ALLOWED_COLUMNS: Record<TableName, readonly string[]> = {
     'updated_at', 'compound_limit', 'addition', 'axis', 'user_id', 'name', 'cyl', 'sph', 'sort_order',
     'label', 'min_sph', 'max_sph', 'min_cyl', 'max_cyl', 'step', 'is_active',
   ],
-  orders: ['id', 'shop_id', 'lens_details', 'quantity', 'created_at', 'stock_updated'],
+  orders: ['id', 'shop_id', 'lens_details', 'quantity', 'created_at', 'stock_updated', 'sent_at'],
   sales: [
     'id', 'shop_id', 'lens_details', 'quantity', 'created_at', 'material', 'vision', 'sign',
     'power_type', 'sph', 'cyl', 'axis', 'addition', 'coatings',

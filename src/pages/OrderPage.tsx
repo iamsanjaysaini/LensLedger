@@ -80,7 +80,28 @@ function getGroupHeading(name: string): string {
     }
   }
   t = t.replace(/\s+/g, ' ').trim();
+  // KT lens: vision type coating ke saath chipka ("HC KT" -> "HCKT")
+  if (p && p.vision === 'KT') t = t.replace(/(\S)\s+KT\b/, '$1KT');
   return t || name.toUpperCase();
+}
+
+// Report me lens ka naam dikhane ka tareeka (sirf KT ke liye badalta hai, stored naam nahi badalta):
+// "-1.50 CYL ADD +2.50 AXIS 90 HC KT" -> "-1.50 CYL 90 ADD +2.50 HCKT"
+// "-0.50/-0.50 ADD +1.50 AXIS 90 HC KT" -> "-0.50/-0.50 CYL 90 ADD +1.50 HCKT"
+// "+0.50 SPH ADD +2.25 HC KT"         -> "+0.50 SPH ADD +2.25 HCKT"
+function formatReportName(name: string): string {
+  const p = parseLensName(name);
+  if (!p || p.vision !== 'KT') return name;
+  let t = name;
+  // Compound KT ("-0.50/-0.50") me power ke baad "CYL" likhte hain
+  if (/[+-]\d+(\.\d+)?\/[+-]\d+(\.\d+)?/.test(t) && !/\bCYL\b/i.test(t)) {
+    t = t.replace(/([+-]\d+(\.\d+)?\/[+-]\d+(\.\d+)?)/, '$1 CYL');
+  }
+  const axisMatch = t.match(/\s*\bAXIS\s*(\d+)/i);
+  if (axisMatch && /\bADD\b/i.test(t)) {
+    t = t.replace(axisMatch[0], '').replace(/\s+ADD\b/i, ` ${axisMatch[1]} ADD`);
+  }
+  return t.replace(/\s+/g, ' ').trim().replace(/(\S)\s+KT\b/i, '$1KT');
 }
 
 // Group ke andar rows ka order: SPH -> CYL -> Compound, phir power ke hisaab se (Plano sabse pehle)
@@ -806,7 +827,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           h: esc(g.heading),
           t: fmtPairsHTML(g.rows.reduce((sum, r) => sum + r[1], 0)),
           gapBefore: customItems.length > 0 && i === 0,
-          rows: sorted.map(r => ({ n: esc(r[0]), q: formatQtyHTML(r[1]) })),
+          rows: sorted.map(r => ({ n: esc(formatReportName(r[0])), q: formatQtyHTML(r[1]) })),
         });
       });
     const totalPairs = fmtPairsHTML([...items, ...customItems].reduce((sum, r) => sum + r[1], 0));

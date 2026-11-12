@@ -59,7 +59,11 @@ const fmtWhen = (iso: string) => {
 
 // ---------- Generate Order report helpers ----------
 // Lens naam se power ke numbers hata kar group heading banata hai.
-// "-1.00 SPH HC" -> "- SPH HC", "-1.50 CYL AXIS 135 ADD +2.50 HC KT" -> "- CYL HC KT"
+// Single vision: SPH / CYL / Compound sab ek heading me ("-1.00 SPH HC" aur "-0.50/-0.25 HC" -> "- HC").
+//   Cross compound ("-1.00/+0.50") ki apni heading rehti hai.
+// Plano: single vision me "-" list me ("Plano Bluecut" -> "- BLUECUT"), KT / Prograssive me "+" list me
+//   ("Plano ADD +2.50 HC KT" -> "+ SPH HC KT").
+// KT / Prograssive: "-1.50 CYL ADD +2.50 AXIS 90 HC KT" -> "- CYL HC KT" (SPH / CYL alag rehte hain)
 function getGroupHeading(name: string): string {
   let t = name
     .replace(/\bADD\s*\+?\d+(\.\d+)?/gi, '')
@@ -67,7 +71,30 @@ function getGroupHeading(name: string): string {
     .replace(/([+-])\d+(\.\d+)?\/([+-])\d+(\.\d+)?/g, '$1 / $3')
     .replace(/([+-])\d+(\.\d+)?/g, '$1');
   t = t.replace(/\s+/g, ' ').trim().toUpperCase();
+  const p = parseLensName(name);
+  if (p) {
+    const sv = p.vision === 'single vision';
+    if (/^plano/i.test(name.trim())) t = t.replace(/^PLANO\b/, sv ? '-' : '+ SPH');
+    if (sv && p.powerType !== 'Cross Compound') {
+      t = t.replace(/\b(SPH|CYL)\b/g, '').replace(/^([+-]) \/ \1(?=\s|$)/, '$1');
+    }
+  }
+  t = t.replace(/\s+/g, ' ').trim();
   return t || name.toUpperCase();
+}
+
+// Group ke andar rows ka order: SPH -> CYL -> Compound, phir power ke hisaab se (Plano sabse pehle)
+function getTypeRank(name: string): number {
+  const p = parseLensName(name);
+  if (!p) return 9;
+  return p.powerType === 'SPH' ? 0 : p.powerType === 'CYL' ? 1 : p.powerType === 'Compound' ? 2 : 3;
+}
+
+// Pairs ko text me likho: 4.5 -> "4&frac12;", 0.5 -> "&frac12;"
+function fmtPairsHTML(q: number): string {
+  const whole = Math.floor(q);
+  if (q % 1 === 0.5) return `${whole > 0 ? whole : ''}&frac12;`;
+  return String(q);
 }
 
 // Groups ka order: single vision -> KT -> Prograssive, phir CR -> Poly -> Glass,
@@ -77,11 +104,13 @@ function getGroupRank(name: string): (number | string)[] {
   if (!p) return [99, 0, 0, '', 0];
   const visionRank = p.vision === 'single vision' ? 0 : p.vision === 'KT' ? 1 : 2;
   const materialRank = p.material === 'CR' ? 0 : p.material === 'Poly' ? 1 : 2;
-  const isPlano = /^plano/i.test(name.trim());
-  const signRank = isPlano ? -1 : p.sign === '-' ? 0 : 1;
+  // Plano ki sign planoSignFor se aati hai (single vision "-", KT / Prograssive "+")
+  const signRank = p.sign === '-' ? 0 : 1;
   const coat = p.coatings.join(' ');
   const coatKey = (coat.toUpperCase() === 'HC' ? '0' : '1') + coat.toUpperCase();
-  const typeRank = p.powerType === 'SPH' ? 0 : p.powerType === 'CYL' ? 1 : p.powerType === 'Compound' ? 2 : 3;
+  // Single vision me SPH / CYL / Compound ek hi group hain; Cross compound alag
+  const mergedType = p.vision === 'single vision' && p.powerType !== 'Cross Compound';
+  const typeRank = mergedType ? 0 : p.powerType === 'SPH' ? 0 : p.powerType === 'CYL' ? 1 : p.powerType === 'Compound' ? 2 : 3;
   return [visionRank, materialRank, signRank, coatKey, typeRank];
 }
 
@@ -760,25 +789,29 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
       if (!groupMap.has(heading)) groupMap.set(heading, { heading, rank: getGroupRank(item[0]), rows: [] });
       groupMap.get(heading)!.rows.push(item);
     });
-    let serial = 0; // numbering 1 se shuru hoke saare groups me last tak continue
-    const groups: { h: string | null; gapBefore?: boolean; rows: { no: number; n: string; q: string }[] }[] = [];
+    const groups: { h: string | null; t?: string; gapBefore?: boolean; rows: { n: string; q: string }[] }[] = [];
     // Custom (Non-Stock) lenses sabse pehle, bina heading ke
     if (customItems.length) {
       groups.push({
         h: null,
-        rows: customItems.map(r => ({ no: ++serial, n: esc(r[0]), q: formatQtyHTML(r[1]) })),
+        rows: customItems.map(r => ({ n: esc(r[0]), q: formatQtyHTML(r[1]) })),
       });
     }
-    // Uske baad ek line ka gap, phir heading wale groups
+    // Uske baad ek line ka gap, phir heading wale groups (heading ke saath uske total pair)
     Array.from(groupMap.values())
       .sort((a, b) => compareGroupRank(a.rank, b.rank) || a.heading.localeCompare(b.heading))
       .forEach((g, i) => {
+        const sorted = [...g.rows].sort((a, b) => getTypeRank(a[0]) - getTypeRank(b[0]) || sortLensNames(a[0], b[0]));
         groups.push({
           h: esc(g.heading),
+          t: fmtPairsHTML(g.rows.reduce((sum, r) => sum + r[1], 0)),
           gapBefore: customItems.length > 0 && i === 0,
-          rows: g.rows.map(r => ({ no: ++serial, n: esc(r[0]), q: formatQtyHTML(r[1]) })),
+          rows: sorted.map(r => ({ n: esc(r[0]), q: formatQtyHTML(r[1]) })),
         });
       });
+    const totalPairs = fmtPairsHTML([...items, ...customItems].reduce((sum, r) => sum + r[1], 0));
+    const shopName = shops.find(sh => sh.id === selectedShop)?.name || shops[0]?.name || 'Narbada Eye Care';
+    const jsonSafe = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c');
     // '<' ko escape karte hain taaki script tag kabhi beech me band na ho
     const groupsJson = JSON.stringify(groups).replace(/</g, '\\u003c');
     const fileDate = dateStr.replace(/\//g, '-');
@@ -795,16 +828,16 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
           .btn{background:#4f46e5;color:white;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-family:sans-serif;font-size:14px}
           .btn:hover{background:#4338ca}
           .page-container{background:white;width:595px;height:842px;overflow:hidden;padding:8px 6px;margin:0 auto 12px;box-shadow:0 0 4px rgba(0,0,0,.25)}
-          .header{border-bottom:2px solid black;padding-bottom:4px;margin-bottom:8px;text-align:center;font-weight:bold;font-size:12px}
+          .header{border-bottom:2px solid black;padding-bottom:4px;margin-bottom:8px;font-weight:bold;font-size:12px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
+          .header .h-l{text-align:left}.header .h-c{text-align:center}.header .h-r{text-align:right}
           .columns{display:flex;gap:4px;align-items:flex-start}.column{flex:1;min-width:0}
           table{width:100%;border-collapse:collapse;table-layout:fixed}
           td{border:none;border-bottom:1px solid #d9d9d9;padding:2px 4px;text-align:left;line-height:1.2;font-size:12px;vertical-align:middle;word-wrap:break-word}
           td.grp{background:#f1f2f4;font-weight:bold;font-size:14px}
           tr.gap td{border:none;height:18px;padding:0;background:transparent}
-          col.c-num{width:36px}col.c-qty{width:72px}
+          col.c-qty{width:72px}
           td{color:#000}
-          td.name{color:#000;font-weight:bold}
-          td.num-col{text-align:right;font-weight:bold;white-space:nowrap;padding:2px 3px}
+          td.name{color:#000;font-weight:bold;font-size:11px}
           .qty-col{text-align:center;font-weight:bold;white-space:nowrap}
           .frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;font-size:.75em;line-height:1;margin:0 1px}
           .frac .num{display:block;border-bottom:1px solid black;padding:0 1px;line-height:1.1}
@@ -824,8 +857,10 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
         <div id="pages"></div>
         <script>
           var GROUPS = ${groupsJson};
-          var DATE_STR = ${JSON.stringify(dateStr)};
-          var FILE_DATE = ${JSON.stringify(fileDate)};
+          var DATE_STR = ${jsonSafe(dateStr)};
+          var FILE_DATE = ${jsonSafe(fileDate)};
+          var SHOP_NAME = ${jsonSafe(shopName)};
+          var TOTAL_HTML = ${jsonSafe(totalPairs)};
           var pagesEl = document.getElementById('pages');
           var cur = null, colIdx = 0, tbody = null, curGroup = null;
 
@@ -833,8 +868,8 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             var p = document.createElement('div');
             p.className = 'page-container';
             p.innerHTML = '<div class="header"></div><div class="columns">'
-              + '<div class="column"><table><colgroup><col class="c-num"><col><col class="c-qty"></colgroup><tbody></tbody></table></div>'
-              + '<div class="column"><table><colgroup><col class="c-num"><col><col class="c-qty"></colgroup><tbody></tbody></table></div></div>';
+              + '<div class="column"><table><colgroup><col><col class="c-qty"></colgroup><tbody></tbody></table></div>'
+              + '<div class="column"><table><colgroup><col><col class="c-qty"></colgroup><tbody></tbody></table></div></div>';
             pagesEl.appendChild(p);
             cur = p; colIdx = 0; tbody = p.getElementsByTagName('tbody')[0]; curGroup = null;
           }
@@ -846,20 +881,20 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
             var limit = cur.getBoundingClientRect().bottom - 8;
             return tbody.getBoundingClientRect().bottom > limit;
           }
-          function headEl(text, contd){
+          function headEl(g, contd){
             var tr = document.createElement('tr');
-            tr.innerHTML = '<td class="grp" colspan="3">' + text + (contd ? ' (contd.)' : '') + '</td>';
+            tr.innerHTML = '<td class="grp" colspan="2">' + g.h + (contd ? ' (contd.)' : (g.t ? ' (' + g.t + ' pair)' : '')) + '</td>';
             return tr;
           }
           function gapEl(){
             var tr = document.createElement('tr');
             tr.className = 'gap';
-            tr.innerHTML = '<td colspan="3"></td>';
+            tr.innerHTML = '<td colspan="2"></td>';
             return tr;
           }
           function rowEl(r){
             var tr = document.createElement('tr');
-            tr.innerHTML = '<td class="num-col">' + r.no + '.</td><td class="name">' + r.n + '</td><td class="qty-col">' + r.q + '</td>';
+            tr.innerHTML = '<td class="name">' + r.n + '</td><td class="qty-col">' + r.q + '</td>';
             return tr;
           }
           // Heading + row saath rakhta hai. Jagah na ho to agle column / agle page par jata hai.
@@ -870,7 +905,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
               if (g.h !== null && (empty || curGroup !== g)) {
                 // custom lenses ke baad pehli heading se pehle ek line ka gap
                 if (g.gapBefore && !empty && !g.started) nodes.push(gapEl());
-                nodes.push(headEl(g.h, g.started));
+                nodes.push(headEl(g, g.started));
               }
               nodes.push(rowEl(r));
               nodes.forEach(function(n){ tbody.appendChild(n); });
@@ -885,8 +920,11 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
 
           var pgs = pagesEl.children;
           for (var i = 0; i < pgs.length; i++) {
-            pgs[i].querySelector('.header').textContent =
-              'DATE: ' + DATE_STR + (pgs.length > 1 ? '   (Page ' + (i + 1) + ' of ' + pgs.length + ')' : '');
+            var hd = pgs[i].querySelector('.header');
+            hd.innerHTML = '<span class="h-l"></span><span class="h-c"></span><span class="h-r"></span>';
+            hd.children[0].textContent = SHOP_NAME;
+            hd.children[1].innerHTML = TOTAL_HTML + ' pair';
+            hd.children[2].textContent = DATE_STR + (pgs.length > 1 ? '  (Page ' + (i + 1) + ' of ' + pgs.length + ')' : '');
           }
 
           function downloadJPG(){
@@ -916,7 +954,7 @@ export default function OrderPage({ isDemo = false }: { isDemo?: boolean }) {
   function formatQtyHTML(qty: number): string {
     const whole = Math.floor(qty);
     const frac = qty % 1;
-    const unit = qty === 1 ? 'Pair' : 'Pairs';
+    const unit = 'Pair';
     if (frac === 0.5) {
       const w = whole > 0 ? `${whole}` : '';
       return `${w}<span class="frac"><span class="num">1</span><span class="den">2</span></span> ${unit}`;
